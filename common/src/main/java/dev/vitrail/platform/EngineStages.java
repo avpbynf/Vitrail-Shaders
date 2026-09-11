@@ -35,6 +35,12 @@ import net.minecraft.world.phys.Vec3;
  * Nothing here is a frame's worth of work in itself. Each method is the short ordered list of what
  * belongs at one point of the frame, and every line of it says why it is at that point rather than
  * the next.
+ * <p>
+ * <strong>On a backend this engine does not draw on, every stage of the level frame returns at
+ * once.</strong> No pack is loaded there, so none of them has anything to do, and beside Iris the
+ * level render is Iris's: the material maps, the depth copies and the entity windows would each
+ * reach into it for nothing. The pack screen, the keys and the F3 lines stand aside on the same
+ * question.
  */
 public final class EngineStages {
 
@@ -146,6 +152,10 @@ public final class EngineStages {
 	 * and the last lines below have nothing to do with the two arguments.
 	 */
 	public static void frameGraphSetup(Matrix4fc modelView, Vec3 cameraPosition) {
+		if (HostReport.otherBackend()) {
+			return;
+		}
+
 		// First, and before the shadow question below can send this line home: the graph is being
 		// BUILT here and not executed, so it is the first point of a level frame where no render pass
 		// is open. That is what the material maps of a plain texture need, and it is the reason they
@@ -198,6 +208,10 @@ public final class EngineStages {
 	 * entities are served in opens.
 	 */
 	public static void afterOpaqueBlocks() {
+		if (HostReport.otherBackend()) {
+			return;
+		}
+
 		// Opens the one window the entities are served in. It has to be a window, because the
 		// screen is drawn by the same feature renderers, with the same pipelines and into the same
 		// target, out of a submit storage GameRenderer hands them after the level: nothing about one
@@ -225,6 +239,10 @@ public final class EngineStages {
 	 * the water is thrown away in its entirety.
 	 */
 	public static void afterOpaqueFeatures() {
+		if (HostReport.otherBackend()) {
+			return;
+		}
+
 		// First, and before anything of this engine draws: everything after this point is either the
 		// world's translucents or, once the level returns, the screen.
 		EntityDraw.opaqueFeatures(false);
@@ -259,6 +277,10 @@ public final class EngineStages {
 	 * vanish.
 	 */
 	public static void afterTranslucentFeatures() {
+		if (HostReport.otherBackend()) {
+			return;
+		}
+
 		// First, and before the layer is composed: closing the window closes any pass a group left
 		// open, and composing opens one of its own where the encoder allows only one at a time.
 		EntityDraw.translucentFeatures(false);
@@ -273,6 +295,10 @@ public final class EngineStages {
 	 * any render pass the game has open.
 	 */
 	public static void afterLevel() {
+		if (HostReport.otherBackend()) {
+			return;
+		}
+
 		// The hand's blending half, before the chain and never after it: what it draws has to be in
 		// the picture the composites read, and this stage is the last moment it can be. Iris draws it
 		// at the same place, at the head of the call that ends its level render and so ahead of its
