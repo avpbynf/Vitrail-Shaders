@@ -32,6 +32,10 @@ public final class PackLoader {
 
 	public static final String DIRECTORY_NAME = "shaderpacks";
 
+	/** Iris's order for pack names, case ignored first and the exact name breaking a tie. */
+	private static final Comparator<String> BY_NAME =
+			String.CASE_INSENSITIVE_ORDER.thenComparing(Comparator.naturalOrder());
+
 	private PackLoader() {
 	}
 
@@ -107,8 +111,13 @@ public final class PackLoader {
 	}
 
 	/**
-	 * Every pack in the directory, in name order. A directory and a zip are both candidates; a
-	 * zip that turns out not to be a pack fails when it is opened, not here.
+	 * Every pack in the directory, in the order Iris lists them. A directory and a zip are both
+	 * candidates; a zip that turns out not to be a pack fails when it is opened, not here.
+	 * <p>
+	 * Iris sorts on the name with its formatting codes left out, ignoring case and then by the exact
+	 * name ({@code ShaderpackDirectoryManager.java:78-107}), so a pack whose name opens on a colour
+	 * code sits among the others rather than after every pack named in plain letters. Its debug mode, which puts folders
+	 * above archives, has no counterpart here.
 	 */
 	public static List<Path> candidates(Path gameDirectory) throws IOException {
 		Path directory = directory(gameDirectory);
@@ -118,10 +127,28 @@ public final class PackLoader {
 
 		try (Stream<Path> entries = Files.list(directory)) {
 			List<Path> found = new ArrayList<>(entries.filter(PackLoader::looksLikeAPack).toList());
-			found.sort(Comparator.comparing(path -> path.getFileName().toString().toLowerCase(Locale.ROOT)));
+			found.sort(Comparator.comparing(path -> withoutFormatting(path.getFileName().toString()),
+					BY_NAME));
 
 			return List.copyOf(found);
 		}
+	}
+
+	/**
+	 * A name with each section sign and the character after it left out, Iris's
+	 * {@code ShaderpackDirectoryManager.java:24-39}: a few packs colour their name that way.
+	 */
+	private static String withoutFormatting(String name) {
+		StringBuilder kept = new StringBuilder(name.length());
+		for (int i = 0; i < name.length(); i++) {
+			if (name.charAt(i) == '§') {
+				i++;
+			} else {
+				kept.append(name.charAt(i));
+			}
+		}
+
+		return kept.toString();
 	}
 
 	/**

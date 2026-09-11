@@ -277,6 +277,11 @@ what the next one holds.
   button, to CurseForge's shader search. It has two now, CurseForge and Modrinth, each asking before
   it opens the page, since Vitrail is on both and a player finds packs where they found the mod.
 
+- **The pack list is in the order Iris shows it.** A few packs colour their name with a formatting
+  code at the start of the file name, and the list sorted on the name as written, so those came
+  after the packs named in plain letters. The codes are left out of the sort now, as Iris does, and
+  two names that differ only in case keep Iris's order too.
+
 ### Fixed
 
 - **Iris and Vitrail installed together no longer close the game at startup on OpenGL.** Both
