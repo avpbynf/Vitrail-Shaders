@@ -664,7 +664,9 @@ public final class PackChoice {
 	 * The whole name is tried before the fragment. Two packs of a folder can have one name inside
 	 * the other, a version next to the version it replaces being the ordinary way that happens, and
 	 * on a fragment the shorter one would answer for both: the settings screen writes the whole
-	 * name for that reason and would otherwise be unable to reach the longer one at all.
+	 * name for that reason and would otherwise be unable to reach the longer one at all. For the same
+	 * reason the name as written is tried before the same name in another case: a case sensitive disk
+	 * can hold both, and whichever sorted first would otherwise answer for the other.
 	 *
 	 * @param asked what {@code pack.txt} says, read by the caller: the folder is searched here and
 	 *              the file is not, so that the one road out of a load that never searches a folder
@@ -674,6 +676,12 @@ public final class PackChoice {
 	private static Optional<Path> choose(List<Path> packs, PackFile asked) {
 		if (!asked.wantsPack()) {
 			return Optional.empty();
+		}
+
+		for (Path pack : packs) {
+			if (pack.getFileName().toString().equals(asked.name())) {
+				return Optional.of(pack);
+			}
 		}
 
 		String wanted = asked.name().toLowerCase(Locale.ROOT);
