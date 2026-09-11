@@ -39,9 +39,9 @@ import java.util.Set;
  * <p>
  * This is the same entry the reference takes, {@code IrisConfig} in its own tree, and by the same
  * public API rather than by reaching into Sodium: one page under the mod's own name, which opens
- * the pack screen with the video settings as the screen to come back to, Iris's where Iris draws
- * ({@link PackScreens}), and a second page for the
- * settings that are this engine's own rather than a pack's. That second page is thin on purpose:
+ * the pack screen with the video settings as the screen to come back to, and an offer to switch to
+ * Vulkan on any other backend, Iris beside it or not ({@link PackScreens}), and, on Vulkan alone, a
+ * second page for the settings that are this engine's own rather than a pack's. That second page is thin on purpose:
  * almost everything this engine has to offer is the pack's and lives on the pack's pages, and only
  * what a player sets over every pack belongs here. The one thing registered that is not a page is an
  * overlay over an option of Sodium's own, whose reason is written where it is registered.
@@ -118,17 +118,24 @@ public final class ConfigEntry implements ConfigEntryPoint {
 				.addPage(builder.createExternalPage()
 						.setName(Component.translatable(ScreenText.PACKS_TITLE))
 						.setScreenConsumer(parent ->
-								Minecraft.getInstance().gui.setScreen(PackScreens.open(parent))))
-				.addPage(builder.createOptionPage()
-						.setName(Component.translatable(ScreenText.PAGE_TITLE))
-						.addOptionGroup(builder.createOptionGroup()
-								.addOption(shadowDistance(builder))
-								.addOption(shadowMapScale(builder))
-								.addOption(renderScale(builder))
-								.addOption(temporalFold(builder))
-								.addOption(shadowAmortisation(builder))
-								.addOption(graphicsApi(builder))
-								.addOption(moduleCacheCeiling(builder))));
+								Minecraft.getInstance().gui.setScreen(PackScreens.open(parent))));
+
+		// Left out where this engine draws nothing, as Iris leaves its own out on the backend it does
+		// not draw on, IrisConfig.java:54-55. The game's own Graphics API setting stays in the video
+		// settings, and the rescue choice below is only read after a startup that crashed, so nothing
+		// here is needed to get back to Vulkan. The device is up by this walk.
+		if (!HostReport.otherBackend()) {
+			options.addPage(builder.createOptionPage()
+					.setName(Component.translatable(ScreenText.PAGE_TITLE))
+					.addOptionGroup(builder.createOptionGroup()
+							.addOption(shadowDistance(builder))
+							.addOption(shadowMapScale(builder))
+							.addOption(renderScale(builder))
+							.addOption(temporalFold(builder))
+							.addOption(shadowAmortisation(builder))
+							.addOption(graphicsApi(builder))
+							.addOption(moduleCacheCeiling(builder))));
+		}
 
 		// Only on the backend this engine draws on. Anywhere else the pack draws nothing, so RGSS
 		// keeps working and there is nothing to narrow. And never where Iris draws, which registers

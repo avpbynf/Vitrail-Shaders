@@ -1,5 +1,6 @@
 package dev.vitrail.screen;
 
+import dev.vitrail.HostReport;
 import dev.vitrail.IrisBeside;
 import dev.vitrail.render.PackChoice;
 import dev.vitrail.ScreenText;
@@ -23,12 +24,12 @@ import java.nio.file.Path;
  * Both are Iris's own, {@code iris.keybind.reload} and {@code iris.keybind.shaderPackSelection} at
  * {@code Iris.java:811} and {@code 813}, so a player who has configured a pack before will try them
  * first and find them. The game hands a press to every mapping bound to its key, so beside Iris one
- * press reaches both mods, and only one of them may answer it. Where Iris draws, the reload stands
- * aside, Iris's answering only with its debug options on ({@code Iris.java:181}), and so does this
- * screen's key while it shares Iris's. Where Iris does not draw, on Vulkan, Iris binds I to a screen
- * saying it cannot run there ({@code IrisVKOnly.java:17}), and the press is taken from Iris's mapping
- * before Iris asks it ({@link #beforeTick}). A player who moved either key gets each screen on its
- * own.
+ * press reaches both mods, and only one of them may answer it. Off Vulkan this engine draws nothing and
+ * both keys do nothing, which beside Iris on OpenGL leaves each press to Iris's own, its reload
+ * answering only with its debug options on ({@code Iris.java:181}). Where Iris does not draw, on
+ * Vulkan, Iris binds I to a screen saying it cannot run there ({@code IrisVKOnly.java:17}), and the
+ * press is taken from Iris's mapping before Iris asks it ({@link #beforeTick}). A player who moved
+ * either key on Vulkan gets each screen on its own.
  * <p>
  * The mappings and what a press does are here; registering them and asking them on the tick is each
  * loader's own business, because those are the two things they do differently. Asking on a tick
@@ -58,12 +59,13 @@ public final class SettingsKey {
 	}
 
 	/**
-	 * Takes the press of the key this mod shares with Iris from Iris's mapping, where Iris does not
-	 * draw. Called before anything of the tick has asked a key, because Iris asks its own at the end
-	 * of the tick ({@code VKOnly_InitKeys.java:27}) and would open its screen over this one.
+	 * Takes the press of the key this mod shares with Iris from Iris's mapping, on Vulkan where this
+	 * engine draws. Called before anything of the tick has asked a key, because Iris asks its own at
+	 * the end of the tick ({@code VKOnly_InitKeys.java:27}) and would open its screen over this one.
+	 * Off Vulkan Iris's mapping is left alone, whichever of Iris's two faces a fallback left it with.
 	 */
 	public static void beforeTick() {
-		if (!IrisBeside.installed() || PackScreens.irisDraws()) {
+		if (!IrisBeside.installed() || HostReport.otherBackend()) {
 			return;
 		}
 
@@ -73,15 +75,20 @@ public final class SettingsKey {
 		}
 	}
 
-	/** Acts on whichever of the two was pressed since the last tick, and does nothing otherwise. */
+	/**
+	 * Acts on whichever of the two was pressed since the last tick, and does nothing otherwise. Off
+	 * Vulkan the presses are only emptied, so that none of them waits to be answered on a later tick.
+	 */
 	public static void poll() {
+		if (HostReport.otherBackend()) {
+			drain(OPEN);
+			drain(RELOAD);
+			return;
+		}
+
 		if (drain(OPEN)) {
-			// Where Iris draws and the key is shared, the same press reached Iris's mapping, which opens
-			// Iris's screen: opening it here as well would lay a second over it.
-			if (!PackScreens.irisDraws() || sharedIrisKey() == null) {
-				Minecraft minecraft = Minecraft.getInstance();
-				minecraft.gui.setScreen(PackScreens.open(minecraft.gui.screen()));
-			}
+			Minecraft minecraft = Minecraft.getInstance();
+			minecraft.gui.setScreen(PackScreens.open(minecraft.gui.screen()));
 
 			return;
 		}
@@ -139,13 +146,6 @@ public final class SettingsKey {
 	 * it.
 	 */
 	private static void reload() {
-		// Where Iris draws this session the key is Iris's: it reloads its own pack on the same R, and
-		// this engine, which draws nothing on that backend, would only answer the press with a red
-		// line saying the pack is not drawn.
-		if (IrisBeside.draws()) {
-			return;
-		}
-
 		Path directory = PackChoice.session()
 				.map(PackSession::gameDirectory)
 				.orElseGet(() -> Vitrail.platform().gameDirectory());

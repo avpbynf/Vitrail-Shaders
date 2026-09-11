@@ -204,8 +204,8 @@ public final class HostReport {
 
 	/**
 	 * Said as an error rather than a warning because the pack a player asks for is not drawn at all,
-	 * and that is the engine's doing: {@code PackChoice.load} reads whichever one is named, publishes
-	 * it to the settings screen and stops there. It stops because of what the passes drew when they were let run on the
+	 * and that is the engine's doing: {@code PackChoice.load} finds whichever one is named and stops
+	 * before reading it. It stops because of what the passes drew when they were let run on the
 	 * other backend, the symptom this repository has seen there: a picture both credible and wrong,
 	 * the programs having been translated against Vulkan's depth and clip conventions. Credible and
 	 * wrong reads as a pack fault, which is worse than a picture the game draws alone, so nothing is
@@ -229,8 +229,8 @@ public final class HostReport {
 		}
 
 		Vitrail.logger().error("This game is running the {} backend and {}'s programs are translated "
-				+ "for {} alone. The mod loads, a pack it is asked for is read and shown in its "
-				+ "settings screen, and nothing of it is drawn: the game keeps its own image. Set "
+				+ "for {} alone. The mod loads, and a pack it is asked for is neither read nor drawn: "
+				+ "the game keeps its own image. Set "
 				+ "Graphics API to \"Prefer Vulkan (Experimental)\" under Options, Video Settings, "
 				+ "and restart. If it was already set there, either a launch argument forced this "
 				+ "backend, which the game says higher up, or the Vulkan boot failed and the game "
