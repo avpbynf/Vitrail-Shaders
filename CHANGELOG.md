@@ -23,6 +23,11 @@ what the next one holds.
   code is in use, nor sets a name. What a pack writes inside a comment about its own buffers, their
   format and their mip chain, is read in full as Iris reads it, so Complementary with
   EuphoriaPatches, Photon, Sildur's Vibrant and I Like Vanilla get the buffers their text asks for.
+- **Photon no longer crashes the game with its water parallax on.** Looking along the water surface,
+  as when swimming just at it, the pack's waves were computed far out along the view, the engine's
+  own sine came out enormous there, and the pack's water kept stepping until the graphics driver
+  gave up and the game closed with a lost device. The sine now stays between minus one and one for
+  any value, as the driver's does, and nothing changes wherever it already did.
 
 ## 0.11.0-beta
 

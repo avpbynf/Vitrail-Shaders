@@ -256,6 +256,16 @@ record Emitter(ProgramStage stage, VertexInputs inputs, List<String> bound, Alph
 		// is folded to a quarter turn and fed to the odd polynomial. Measured on the hash's own
 		// yardstick: a single-constant reduction leaves a field the uniformity test rejects at 427
 		// where white noise scores 15, and this form scores 11 to 14, alongside the reference.
+		//
+		// The result is clamped to one, because the reduction only keeps the residue within a half
+		// turn up to arguments of some tens of millions. Past that the residue grows with the
+		// argument, the polynomial returns values above one, and further out its square overflows
+		// and the sine is infinite, where the driver's own stays within one. A parallax march
+		// comparing against a wave height built on such a sine then runs for billions of turns or
+		// forever, and the device is lost: Photon's water at a grazing view, whose step divides by
+		// the view's tiny component along the normal. Every value the helper already gave within
+		// one is left as it was; the others, which carry nothing of the argument any more, become
+		// plus or minus one.
 		if (this.trigCalls > 0) {
 			for (String shape : new String[] {"float", "vec2", "vec3", "vec4"}) {
 				lines.add(shape + " " + GlslTranslator.REDUCED_SIN + "(" + shape + " ofX) {"
@@ -265,8 +275,8 @@ record Emitter(ProgramStage stage, VertexInputs inputs, List<String> bound, Alph
 						+ " " + shape + " ofS = sign(ofR);"
 						+ " " + shape + " ofA = 1.5707964 - abs(abs(ofR) - 1.5707964);"
 						+ " " + shape + " ofZ = ofA * ofA;"
-						+ " return ofS * ofA * (1.0 + ofZ * (-1.6666654611e-1"
-						+ " + ofZ * (8.3321608736e-3 + ofZ * (-1.9515295891e-4)))); }");
+						+ " return clamp(ofS * ofA * (1.0 + ofZ * (-1.6666654611e-1"
+						+ " + ofZ * (8.3321608736e-3 + ofZ * (-1.9515295891e-4)))), -1.0, 1.0); }");
 				lines.add(shape + " " + GlslTranslator.REDUCED_COS + "(" + shape + " ofX) {"
 						+ " return " + GlslTranslator.REDUCED_SIN + "(ofX + 1.5707964); }");
 			}
