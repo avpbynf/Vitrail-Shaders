@@ -488,9 +488,19 @@ public final class PackChain {
 				ordered(chain.chain()).stream().map(ChainPlan.Pass::program)
 						.collect(Collectors.toSet()),
 				Set.copyOf(chain.targets().passing()));
-		// Before the first frame allocates a target: the usage a compute needs is baked into the
-		// image at creation, and nothing can add it afterwards.
-		this.targets.storageTargets(this.compute.storageTargets());
+		// Before the first frame allocates a target: the storage usage is baked into the image at
+		// creation, and nothing can add it afterwards. Whatever stores into a target asks for it: a
+		// compute, a full screen program, read off their translated text, and a world program,
+		// which is only translated when first drawn and so is read off the pack's text instead.
+		Set<Integer> stored = new LinkedHashSet<>(this.compute.storageTargets());
+		stored.addAll(chain.targets().stored());
+		for (ChainPlan.Pass pass : ordered(chain.chain())) {
+			PackProgram.Loaded loaded = chain.programs().get(pass.program());
+			if (loaded != null) {
+				stored.addAll(PackPass.colourImages(loaded));
+			}
+		}
+		this.targets.storageTargets(stored);
 	}
 
 	/**

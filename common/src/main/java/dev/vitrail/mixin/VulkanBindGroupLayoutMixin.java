@@ -5,6 +5,7 @@ import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.llamalad7.mixinextras.sugar.Local;
 import com.mojang.blaze3d.vulkan.VulkanBindGroupLayout;
 import com.mojang.blaze3d.vulkan.VulkanBindGroupLayout.Entry;
+import dev.vitrail.pack.model.TargetName;
 import dev.vitrail.pack.texture.CustomImages;
 import dev.vitrail.render.GeometryStage;
 import dev.vitrail.render.WideSamplerSets;
@@ -23,7 +24,8 @@ import java.nio.LongBuffer;
 import java.util.List;
 
 /**
- * Emits {@code VK_DESCRIPTOR_TYPE_STORAGE_IMAGE} for an {@code image.NAME} uniform, and
+ * Emits {@code VK_DESCRIPTOR_TYPE_STORAGE_IMAGE} for an {@code image.NAME} or
+ * {@code colorimgN} uniform, and
  * {@code VK_DESCRIPTOR_TYPE_STORAGE_BUFFER} for a {@code bufferObject} block.
  * <p>
  * The Java enum has no storage-image or storage-buffer arm, so the layout would otherwise write
@@ -57,7 +59,8 @@ public abstract class VulkanBindGroupLayoutMixin {
 			VkDescriptorSetLayoutBinding binding, int type, Operation<VkDescriptorSetLayoutBinding> original) {
 		Entry entry = CURRENT.get();
 		if (type == 1 && entry != null && (StorageImages.storageBinding(entry.name())
-				|| CustomImages.storage(entry.name()))) {
+				|| CustomImages.storage(entry.name())
+				|| TargetName.imageIndex(entry.name()).isPresent())) {
 			type = 3;
 		}
 

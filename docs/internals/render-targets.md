@@ -59,7 +59,8 @@ Two questions neither `GpuDevice` nor `DeviceInfo` gives a way to ask: whether t
 the packed eleven-eleven-ten float format as a colour attachment, and whether it can filter a
 thirty-two bit float format linearly. The backend behind them answers that kind of question, and the
 engine asks it in one place already: whether this device makes a storage image of a format, which a
-compute writing a colour target needs, is read off the physical device's format properties rather
+compute or graphics shader writing a colour target needs, is read off the physical device's format
+properties rather
 than off a table of our own. These two are not asked that way, and their defence is ordering: the
 format is named in the log **before** the allocation is attempted, so that when a driver dies the
 last line written names the culprit.

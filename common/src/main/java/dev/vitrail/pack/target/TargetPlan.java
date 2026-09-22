@@ -146,6 +146,7 @@ public final class TargetPlan {
 	private final TargetDirectives directives;
 	private final TargetSchedule schedule;
 	private final Set<Integer> written;
+	private final Set<Integer> stored;
 	private final Set<Integer> sampled;
 	private final Set<Integer> allocated;
 	private final int shadowCeiling;
@@ -199,6 +200,7 @@ public final class TargetPlan {
 		this.computes = List.copyOf(draft.computes);
 		this.passing = List.copyOf(draft.passing);
 		this.written = Collections.unmodifiableSet(new TreeSet<>(draft.written));
+		this.stored = Collections.unmodifiableSet(new TreeSet<>(draft.stored));
 		this.sampled = Collections.unmodifiableSet(new TreeSet<>(draft.sampled));
 
 		TreeSet<Integer> allocated = new TreeSet<>(draft.written);
@@ -857,12 +859,13 @@ public final class TargetPlan {
 			// the light's own geometry at :746, and the one place it does not is the shadow
 			// COMPOSITES, which this walk has already skipped above.
 			//
-			// What this ALLOCATES for, nothing here yet BINDS for: the image behind colorimgN is
-			// pushed for a compute and for nothing else, so iterationT's line program stores into
-			// an image no descriptor carries. That is a gap of its own, older than this, and the
-			// allocation is right whether or not it is closed: the reference opens the target on
-			// the declaration alone.
-			draft.written.addAll(colourImages(unit));
+			// A graphics program and a compute bind this same allocated target through a storage
+			// descriptor. The declaration is still what allocates it: the reference opens the
+			// target on the declaration alone, before either kind of program runs. It is also
+			// what creates it writable, the storage usage being baked into the image.
+			Set<Integer> stores = colourImages(unit);
+			draft.written.addAll(stores);
+			draft.stored.addAll(stores);
 
 			// A full screen program reads colortex0 under every name nothing else answers for, which
 			// is what SamplerPlan gives it and why Iris hands its default sampler the first colour
@@ -1085,6 +1088,14 @@ public final class TargetPlan {
 
 	public Set<Integer> written() {
 		return this.written;
+	}
+
+	/**
+	 * The targets some fragment stage of this place stores into as {@code colorimgN}, the
+	 * geometry drawn from the light included, read off the pack's text at load.
+	 */
+	public Set<Integer> stored() {
+		return this.stored;
 	}
 
 	public Set<Integer> sampled() {
@@ -1606,6 +1617,7 @@ public final class TargetPlan {
 		private final List<String> unreachableComputes = new ArrayList<>();
 		private final Set<String> shadowComposites = new TreeSet<>();
 		private final Set<Integer> written = new TreeSet<>();
+		private final Set<Integer> stored = new TreeSet<>();
 		private final Set<Integer> sampled = new TreeSet<>();
 
 		/** Shadow colour buffers a program of the place draws into or reads. */

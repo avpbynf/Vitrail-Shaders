@@ -154,6 +154,9 @@ final class PackPass {
 	private final List<String> notes = new ArrayList<>();
 	private final List<GpuTextureView> attachedViews = new ArrayList<>();
 
+	/** Whether the colour image this program stores into was already said to be unwritable. */
+	private boolean unwritableNoted;
+
 	/**
 	 * The area of the last descriptor built and the screen it was built for. This program's own size
 	 * follows the screen and nothing else, so the value moves on a resize and never between two.
@@ -499,6 +502,16 @@ final class PackPass {
 		return List.copyOf(this.notes);
 	}
 
+	/** The colour targets a translated program stores into as {@code colorimgN}, either stage. */
+	static Set<Integer> colourImages(PackProgram.Loaded loaded) {
+		Set<Integer> indices = new LinkedHashSet<>();
+		for (TranslatedUnit.Uniform sampler : loaded.program().samplers()) {
+			TargetName.imageIndex(sampler.name()).ifPresent(indices::add);
+		}
+
+		return indices;
+	}
+
 	/**
 	 * {@code colortex6 as sampler3D}. The type is always printed beside the name, because the name
 	 * on its own is what made this look like a colour target in the first place.
@@ -593,8 +606,9 @@ final class PackPass {
 		pass.setUniform(UNIFORM_BLOCK, uniforms);
 		StorageBuffers.bind(pass, this.storage);
 		pass.setVertexBuffer(0, quad.slice());
-		bindSamplers(pass, targets, depthView, distantView);
-		pass.draw(VERTICES, 1, 0, 0);
+		if (bindSamplers(pass, targets, depthView, distantView)) {
+			pass.draw(VERTICES, 1, 0, 0);
+		}
 	}
 
 	/**
@@ -609,11 +623,38 @@ final class PackPass {
 	 * @param distantView the far terrain's depth on the same split, already converted as well, or
 	 *                    null for the far plane on the frames the pack drew no far terrain
 	 */
-	private void bindSamplers(RenderPass pass, ColorTargets targets, GpuTextureView depthView,
+	private boolean bindSamplers(RenderPass pass, ColorTargets targets, GpuTextureView depthView,
 			GpuTextureView distantView) {
 		for (int at = 0; at < this.samplers.size(); at++) {
 			String sampler = this.samplers.get(at);
 			SamplerPlan.Binding binding = this.samplerBindings.get(at);
+			// An imageStore from a vertex or fragment stage writes the same half that a compute
+			// hanging off this pass would write. A final has no step, so it uses the frame's
+			// ending side. The descriptor mixins turn this binding into a storage image.
+			var image = TargetName.imageIndex(sampler);
+			if (image.isPresent()) {
+				int index = image.getAsInt();
+				TargetSchedule.Side side = this.step == null
+						? (targets.schedule().flippedAtEnd().contains(index)
+								? TargetSchedule.Side.ALT : TargetSchedule.Side.MAIN)
+						: this.step.read(index);
+				TargetSurface target = targets.surface(index, side);
+				// Left unbound the draw would throw and stop the whole pack, so this program alone
+				// is not drawn, as a compute storing into such a target is not dispatched.
+				if (target == null || !target.storage()) {
+					if (!this.unwritableNoted) {
+						this.unwritableNoted = true;
+						Vitrail.logger().warn("{} stores into {}, which {}, so it is not drawn",
+								this.path, sampler, target == null
+										? "this place never allocated"
+										: "was not created writable: this device makes no storage "
+												+ "image of its format");
+					}
+					return false;
+				}
+				pass.bindTexture(sampler, target.storageView(), sampler(false, FilterMode.NEAREST, false));
+				continue;
+			}
 
 			// A texture the pack ships answers all three questions at once, and they are one
 			// answer: which image, how it is filtered, and how it is addressed outside zero to one
@@ -670,7 +711,8 @@ final class PackPass {
 				// engine allocates, and black is the honest answer for it: the colour target of
 				// the same name would have the pass read the scene as whatever the pack meant to
 				// sample and look convincing.
-				case UNSERVED, UNBINDABLE, PACK_TEXTURE, CUSTOM_IMAGE -> targets.black();
+				// A colour image never reaches this switch, bound above as a storage image.
+				case UNSERVED, UNBINDABLE, PACK_TEXTURE, CUSTOM_IMAGE, COLOUR_IMAGE -> targets.black();
 			};
 
 			// The noise image is LINEAR for the same reason the terrain reads it LINEAR: it is a
@@ -757,6 +799,8 @@ final class PackPass {
 							? sampler(source.repeat(), filter, false)
 							: sampler(binding.kind(), filter, mipmaps));
 		}
+
+		return true;
 	}
 
 	/**

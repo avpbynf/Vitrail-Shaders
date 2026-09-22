@@ -486,6 +486,9 @@ final class GeometryProgram {
 	private boolean broken;
 	private boolean compiled;
 
+	/** Whether the colour image this program stores into was already said to be unwritable. */
+	private boolean saidUnwritable;
+
 	/**
 	 * The pipeline the pack-load worker built for this program, waiting for a render-thread
 	 * {@link #compile} to hand it to the device's cache, which is the one step the worker may not
@@ -1016,6 +1019,21 @@ final class GeometryProgram {
 		// view of one of those textures, and this is the call that settles those answers again
 		// after a release.
 		resolve();
+		Sampled unwritable = Arrays.stream(this.bound)
+				.filter(one -> one.binding.kind() == SamplerPlan.Kind.COLOUR_IMAGE && one.view == null)
+				.findFirst().orElse(null);
+		if (unwritable != null) {
+			if (!this.saidUnwritable) {
+				this.saidUnwritable = true;
+				Vitrail.logger().warn("{} stores into {}, which was not created writable: this "
+						+ "device makes no storage image of its format, or only a vertex stage "
+						+ "names it, so the game's own shader draws this pass", this.path,
+						unwritable.name);
+			}
+
+			return null;
+		}
+
 		announce();
 		writeBlock();
 
@@ -2071,8 +2089,18 @@ final class GeometryProgram {
 			// noisetex there and nowhere else, so this is not a case the chain also covers.
 			case PACK_TEXTURE -> packTexture(one);
 			case DISTANT_DEPTH -> distantDepth();
+			// Null where the target cannot be stored into: prepare refuses the program then,
+			// the layout typing this name as a storage image that no placeholder can stand for.
+			case COLOUR_IMAGE -> colourImage(binding);
 			default -> this.constants.black();
 		};
+	}
+
+	/** The writable view of a colour target stored into as {@code colorimgN}, or null for none. */
+	private GpuTextureView colourImage(SamplerPlan.Binding binding) {
+		TargetSurface surface = this.targets.surface(binding.index(), binding.side());
+
+		return surface == null || !surface.storage() ? null : surface.storageView();
 	}
 
 	/** The pack's own file behind a name, or black when it took the name over and nothing was read. */

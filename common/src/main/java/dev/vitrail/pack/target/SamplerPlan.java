@@ -146,10 +146,13 @@ public final class SamplerPlan {
 	 * <p>
 	 * {@link #PACK_TEXTURE} is neither: it is a file the pack ships, under a name of its own or
 	 * over a name that already meant something else.
+	 * <p>
+	 * {@link #COLOUR_IMAGE} is a colour target a program stores into as {@code colorimgN}, on the
+	 * half it would read {@code colortexN} from, which is the half Iris binds the image on.
 	 */
 	public enum Kind {
 		COLORTEX, DEPTH, SHADOW_DEPTH, SHADOW_COLOUR, NOISE, PACK_TEXTURE, CENTER_DEPTH,
-		DISTANT_DEPTH, CUSTOM_IMAGE, UNSERVED, UNBINDABLE
+		DISTANT_DEPTH, CUSTOM_IMAGE, COLOUR_IMAGE, UNSERVED, UNBINDABLE
 	}
 
 	/**
@@ -301,6 +304,10 @@ public final class SamplerPlan {
 
 		if (TargetName.index(name).isPresent()) {
 			return Kind.COLORTEX;
+		}
+
+		if (TargetName.imageIndex(name).isPresent()) {
+			return Kind.COLOUR_IMAGE;
 		}
 
 		if (DEPTH.contains(name)) {
@@ -513,12 +520,13 @@ public final class SamplerPlan {
 				continue;
 			}
 
-			if (kind != Kind.COLORTEX) {
+			if (kind != Kind.COLORTEX && kind != Kind.COLOUR_IMAGE) {
 				bindings.add(new Binding(name, kind, -1, TargetSchedule.Side.MAIN, false));
 				continue;
 			}
 
-			int index = TargetName.index(name).orElse(-1);
+			int index = (kind == Kind.COLORTEX ? TargetName.index(name) : TargetName.imageIndex(name))
+					.orElse(-1);
 
 			// A target no program of this dimension writes or samples was never allocated, so
 			// there is nothing to bind. Saying so by name is the whole difference between a gap
@@ -528,7 +536,7 @@ public final class SamplerPlan {
 				continue;
 			}
 
-			bindings.add(new Binding(name, Kind.COLORTEX, index, side(step, index), false));
+			bindings.add(new Binding(name, kind, index, side(step, index), false));
 		}
 
 		return new SamplerPlan(bindings);

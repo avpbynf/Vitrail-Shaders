@@ -7,6 +7,7 @@ import com.mojang.blaze3d.vulkan.VulkanBindGroupLayout;
 import com.mojang.blaze3d.vulkan.VulkanCommandEncoder;
 import com.mojang.blaze3d.vulkan.VulkanRenderPass;
 import com.mojang.blaze3d.vulkan.VulkanRenderPipeline;
+import dev.vitrail.pack.model.TargetName;
 import dev.vitrail.render.PushedDescriptor;
 import dev.vitrail.render.ShadowCompare;
 import dev.vitrail.render.WideSamplerSets;
@@ -26,8 +27,9 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Pushes a storage-image descriptor, a 3D sampled view, and a storage-buffer descriptor for
- * names {@link StorageImages} and {@link StorageBuffers} hold, and the comparison sampler for a
+ * Pushes a storage-image descriptor for pack images and colour targets named {@code colorimgN},
+ * a 3D sampled view, and a storage-buffer descriptor for names {@link StorageImages} and
+ * {@link StorageBuffers} hold, and the comparison sampler for a
  * shadow name the pipeline being drawn declared a comparison.
  * <p>
  * The game always writes a combined image sampler from a 2D {@code GpuTextureView}, and a
@@ -90,7 +92,8 @@ public abstract class VulkanRenderPassMixin {
 			long sampler, Operation<VkDescriptorImageInfo.Buffer> original) {
 		PushedDescriptor pushed = PushedDescriptor.current();
 		StorageImages.Bound bound = pushed.image();
-		if (bound != null && bound.storage()) {
+		if ((bound != null && bound.storage())
+				|| (pushed.entry() != null && TargetName.imageIndex(pushed.entry().name()).isPresent())) {
 			sampler = 0L;
 		} else if (ShadowCompare.noted()) {
 			// Behind the one flag: until the first pack that compares is loaded, every pass of the
@@ -141,7 +144,8 @@ public abstract class VulkanRenderPassMixin {
 			Operation<VkWriteDescriptorSet> original) {
 		PushedDescriptor pushed = PushedDescriptor.current();
 		StorageImages.Bound image = pushed.image();
-		if (type == 1 && image != null && image.storage()) {
+		if (type == 1 && ((image != null && image.storage())
+				|| (pushed.entry() != null && TargetName.imageIndex(pushed.entry().name()).isPresent()))) {
 			type = 3;
 		}
 

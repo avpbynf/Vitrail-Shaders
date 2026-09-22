@@ -147,14 +147,14 @@ final class TargetSurface implements AutoCloseable {
 
 	/**
 	 * The base level alone, which is what a storage descriptor takes: Vulkan binds an image view of
-	 * exactly one level there, and a compute writes level nought. The same object as {@link #view}
+	 * exactly one level there, and a pack program writes level nought. The same object as {@link #view}
 	 * on a surface with no chain, where the whole view is one level already.
 	 */
 	GpuTextureView storageView() {
 		return this.baseView == null ? this.view : this.baseView;
 	}
 
-	/** Whether this surface was created writable from a compute, which nothing can add afterwards. */
+	/** Whether this surface was created writable as a storage image, which cannot be added later. */
 	boolean storage() {
 		return this.storage;
 	}
