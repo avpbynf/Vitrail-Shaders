@@ -4,6 +4,7 @@ import dev.vitrail.mixin.access.RenderPipelineAccessor;
 import dev.vitrail.render.EntityMesh;
 import dev.vitrail.render.PackChain;
 import dev.vitrail.render.StalePipelines;
+import dev.vitrail.render.GeometryHold;
 import dev.vitrail.Vitrail;
 
 import com.mojang.blaze3d.pipeline.RenderPipeline;
@@ -11,6 +12,8 @@ import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import com.mojang.blaze3d.vulkan.VulkanDevice;
 import com.mojang.blaze3d.vulkan.VulkanRenderPipeline;
+import com.mojang.blaze3d.textures.GpuTexture;
+import com.mojang.blaze3d.buffers.GpuBuffer;
 import net.minecraft.resources.Identifier;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
@@ -19,6 +22,7 @@ import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -59,6 +63,22 @@ import org.jspecify.annotations.Nullable;
  */
 @Mixin(VulkanDevice.class)
 public abstract class VulkanDeviceMixin implements StalePipelines {
+
+	/** Allocation emits an initial image barrier, which cannot sit in a retained graphics pass. */
+	@Inject(method = {
+			"createTexture(Ljava/util/function/Supplier;ILcom/mojang/blaze3d/GpuFormat;IIII)Lcom/mojang/blaze3d/textures/GpuTexture;",
+			"createTexture(Ljava/lang/String;ILcom/mojang/blaze3d/GpuFormat;IIII)Lcom/mojang/blaze3d/textures/GpuTexture;"
+	}, at = @At("HEAD"), require = 2)
+	private void vitrail$flushBeforeTextureAllocation(CallbackInfoReturnable<GpuTexture> callback) {
+		GeometryHold.flushIdle(() -> "texture allocation");
+	}
+
+	/** Initial buffer data is uploaded through the backend, bypassing the facade transfer hook. */
+	@Inject(method = "createBuffer(Ljava/util/function/Supplier;ILjava/nio/ByteBuffer;)"
+			+ "Lcom/mojang/blaze3d/buffers/GpuBuffer;", at = @At("HEAD"), require = 1)
+	private void vitrail$flushBeforeBufferUpload(CallbackInfoReturnable<GpuBuffer> callback) {
+		GeometryHold.flushIdle(() -> "initial buffer upload");
+	}
 
 	/**
 	 * Whether the live pack's pipelines cross a resource reload rather than being compiled again

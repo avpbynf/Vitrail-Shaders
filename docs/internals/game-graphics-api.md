@@ -143,7 +143,12 @@ Vulkan encoder, and each instance checks only its own open pass, so a buffer or 
 for through any other instance is recorded straight into whatever pass is recording, which Vulkan
 forbids. A pass this engine keeps open across geometry is therefore ended before such a write
 whenever nothing is drawing into it, and a file `vitrail/transfer-in-pass` in the instance names
-every transfer that still lands inside a pass.
+every transfer that still lands inside a pass. Texture allocation is another source of an image
+barrier: both `VulkanDevice.createTexture` overloads flush an idle hold before the constructor
+records the initial layout transition. The feature layer also ends the hold before its allocation
+and clear. Ending the backend pass alone would leave `GeometryHold` pointing at a closed pass, so
+these boundaries go through the hold itself. Creating a buffer with initial data also ends an
+idle hold, because its backend upload bypasses the facade transfer hooks.
 
 The price still scales with the number of GPU stops rather than with what they read: each closed
 pass, each standalone clear, each copy. Folding a clear into a load-op, blitting a mip chain, and

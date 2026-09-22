@@ -213,6 +213,9 @@ final class FeatureLayer {
 	 * into. Must run outside any render pass.
 	 */
 	GpuTextureView open(GpuDevice device, int width, int height) {
+		// Texture allocation records its layout transition immediately. The event can arrive
+		// with the previous physical render pass still pending on the Vulkan encoder.
+		GeometryHold.flush(() -> "Vitrail feature layer allocation");
 		// Before the latch and not after, the same order ColorTargets.ensure keeps and for the
 		// reason written there: a minimised window is another size, and lifting a refusal on a size
 		// nothing is ever allocated at only makes the real size pay the failure twice.
