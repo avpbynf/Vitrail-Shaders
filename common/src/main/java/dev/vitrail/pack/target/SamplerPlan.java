@@ -207,7 +207,7 @@ public final class SamplerPlan {
 	 *               target plan above all, would otherwise be answered for the pack before
 	 */
 	public static Kind classify(String name, String type, Set<String> supplied, Set<String> images) {
-		if (images.contains(name)) {
+		if (images.contains(CustomImages.originalName(name))) {
 			return Kind.CUSTOM_IMAGE;
 		}
 

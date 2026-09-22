@@ -18,6 +18,7 @@ import dev.vitrail.render.pbr.PbrAtlases;
 import dev.vitrail.render.pbr.PbrMap;
 import dev.vitrail.render.pbr.PbrTextures;
 import dev.vitrail.render.storage.StorageBuffers;
+import dev.vitrail.render.storage.StorageImages;
 import dev.vitrail.render.timing.PassTimings;
 import dev.vitrail.uniform.ClipSpace;
 import dev.vitrail.uniform.TextSink;
@@ -488,6 +489,9 @@ final class GeometryProgram {
 
 	/** Whether the colour image this program stores into was already said to be unwritable. */
 	private boolean saidUnwritable;
+
+	/** The custom image views it asks for that the device cannot give, or null until asked. */
+	private List<String> unusableViews;
 
 	/**
 	 * The pipeline the pack-load worker built for this program, waiting for a render-thread
@@ -1005,6 +1009,21 @@ final class GeometryProgram {
 		}
 
 		if (!compile(device)) {
+			return null;
+		}
+
+		// Asked once, here where the program is prepared, so that a view the device cannot give is
+		// a program refused rather than a descriptor refused while the pass records.
+		if (this.unusableViews == null) {
+			this.unusableViews = StorageImages.unusableViews(this.samplers);
+			if (!this.unusableViews.isEmpty()) {
+				Vitrail.logger().warn("{} reads {} through a view this device cannot sample and "
+						+ "store in that format, so the game's own shader draws this pass", this.path,
+						this.unusableViews);
+			}
+		}
+
+		if (!this.unusableViews.isEmpty()) {
 			return null;
 		}
 

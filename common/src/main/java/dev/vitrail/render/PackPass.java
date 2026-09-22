@@ -10,6 +10,7 @@ import dev.vitrail.pack.target.SamplerPlan;
 import dev.vitrail.pack.target.TargetSchedule;
 import dev.vitrail.pack.texture.CustomImages;
 import dev.vitrail.render.storage.StorageBuffers;
+import dev.vitrail.render.storage.StorageImages;
 import dev.vitrail.uniform.TextSink;
 import dev.vitrail.uniform.WorldState;
 import dev.vitrail.Vitrail;
@@ -157,6 +158,9 @@ final class PackPass {
 	/** Whether the colour image this program stores into was already said to be unwritable. */
 	private boolean unwritableNoted;
 
+	/** The custom image views this program asks for and the device cannot give, said once. */
+	private final List<String> unusableViews;
+
 	/**
 	 * The area of the last descriptor built and the screen it was built for. This program's own size
 	 * follows the screen and nothing else, so the value moves on a resize and never between two.
@@ -203,6 +207,11 @@ final class PackPass {
 		this.uniforms = new PackUniforms(loaded.program().uniforms(), values.catalog());
 		this.samplers = loaded.program().samplers().stream().map(TranslatedUnit.Uniform::name).toList();
 		this.samplerBindings = this.samplers.stream().map(loaded.samplers()::binding).toList();
+		this.unusableViews = StorageImages.unusableViews(this.samplers);
+		if (!this.unusableViews.isEmpty()) {
+			Vitrail.logger().warn("{} is not drawn: it reads {} through a view this device cannot "
+					+ "sample and store in that format", this.path, this.unusableViews);
+		}
 		List<ColorTargets.PackSource> sources = new ArrayList<>();
 		for (int at = 0; at < this.samplers.size(); at++) {
 			SamplerPlan.Binding binding = this.samplerBindings.get(at);
@@ -606,7 +615,7 @@ final class PackPass {
 		pass.setUniform(UNIFORM_BLOCK, uniforms);
 		StorageBuffers.bind(pass, this.storage);
 		pass.setVertexBuffer(0, quad.slice());
-		if (bindSamplers(pass, targets, depthView, distantView)) {
+		if (this.unusableViews.isEmpty() && bindSamplers(pass, targets, depthView, distantView)) {
 			pass.draw(VERTICES, 1, 0, 0);
 		}
 	}
@@ -893,8 +902,8 @@ final class PackPass {
 	 * directive declared, and that is NEAREST.
 	 */
 	static FilterMode customImageFilter(String sampler) {
-		return CustomImages.image(sampler)
-				.map(image -> GpuFormats.filterFor(image.internalFormat().used()))
+		return CustomImages.viewFormat(sampler)
+				.map(GpuFormats::filterFor)
 				.orElse(FilterMode.NEAREST);
 	}
 

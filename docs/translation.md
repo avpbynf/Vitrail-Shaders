@@ -433,6 +433,16 @@ for that path, three different mechanisms, and it is worth knowing which:
   stay the texture the passes attach, so there the flag is added to what that conversion returns,
   for the one creation that asks.
 
+Custom images can use different numeric interpretations of the same memory. For example, a
+pack can allocate `R32F` and declare `layout(r32ui) uniform uimage2D` for integer atomics, or
+allocate `RGBA8` and write its packed word through `r32ui`. The translator retains the shader's
+format and encodes a compatible view in the resource name. The binding selects that format on the
+same mutable Vulkan image, with an explicit device-supported view format list. Integer samplers
+select a view with the same channel widths and signedness and use nearest filtering. Views are
+created on demand, cached, and retired with their image; there is no per-frame conversion or copy.
+Different texel sizes are refused during translation. The encoded name also survives both shader
+caches, and custom image formats are part of the translation cache identity.
+
 No amount of translation work makes a pack compute unit or a pack storage image pass through the
 facade. Vulkan itself supports all of them. The layer above does not, and the backend below it
 does; [the game's graphics API](internals/game-graphics-api.md) says where the split sits.

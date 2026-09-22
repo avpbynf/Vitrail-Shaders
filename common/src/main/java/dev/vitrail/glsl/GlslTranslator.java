@@ -14,6 +14,7 @@ import dev.vitrail.pack.target.SamplerPlan;
 import dev.vitrail.pack.target.SamplerTypes;
 import dev.vitrail.pack.model.TargetName;
 import dev.vitrail.pack.texture.CustomImages;
+import dev.vitrail.pack.texture.CustomImageView;
 import dev.vitrail.pack.texture.VolumeAtlas;
 
 import java.util.ArrayList;
@@ -841,7 +842,8 @@ public final class GlslTranslator {
 	public static String emissionSwitches() {
 		return (reduceTrig ? "trig-reduced" : "trig-driver")
 				+ (softCompare() ? " compare-in-shader" : " compare-on-sampler")
-				+ " shadow-chain-" + (shadowChainZero ? '1' : '0') + (shadowChainOne ? '1' : '0');
+				+ " shadow-chain-" + (shadowChainZero ? '1' : '0') + (shadowChainOne ? '1' : '0')
+				+ " custom-views-v1:" + CustomImages.key();
 	}
 
 	private void rewrite() {
@@ -885,6 +887,7 @@ public final class GlslTranslator {
 		// have had a chance to wrap.
 		moveCenterDepth();
 		liftUniforms();
+		nameCustomImageViews();
 		// After the lifting, which is where the samplers of the file are recorded by name and type,
 		// and after the depth, so that a comparison that road rewrote is under a name of ours by
 		// now and the lookups left standing are the ones that really sample an image.
@@ -5004,6 +5007,52 @@ public final class GlslTranslator {
 		}
 
 		this.tokens.blankRange(start, end);
+	}
+
+	/**
+	 * A custom image can be written as an integer word and sampled as a normalised colour in a
+	 * different program. Keep those declarations distinct in the binding table; the encoded name
+	 * selects a compatible Vulkan view of the same memory, including on a cached translation.
+	 */
+	private void nameCustomImageViews() {
+		Map<String, String> renames = new LinkedHashMap<>();
+		Map<String, String> renamed = new LinkedHashMap<>();
+		this.samplers.forEach((name, declaration) -> {
+			String emitted = name;
+			var image = CustomImages.image(name);
+			if (image.isPresent()) {
+				String type = declaration.substring(0, declaration.indexOf(' '));
+				var base = image.get().internalFormat().used();
+				var requested = CustomImageView.requested(base, type, this.imageFormats.get(name));
+				if (requested.isPresent() && requested.get() != base) {
+					if (!CustomImageView.compatible(base, requested.get())) {
+						throw new IllegalArgumentException("Incompatible image view for " + name
+								+ ": " + base + " as " + requested.get());
+					}
+					emitted = new CustomImageView(name, requested.get()).name();
+					renames.put(name, emitted);
+					String qualifiers = this.memoryQualifiers.remove(name);
+					if (qualifiers != null) this.memoryQualifiers.put(emitted, qualifiers);
+					String format = this.imageFormats.remove(name);
+					if (format != null) this.imageFormats.put(emitted, format);
+					declaration = type + " " + emitted
+							+ declaration.substring(type.length() + 1 + name.length());
+				}
+			}
+			renamed.put(emitted, declaration);
+		});
+		if (renames.isEmpty()) return;
+		this.samplers.clear();
+		this.samplers.putAll(renamed);
+		for (int at = 0; at < this.tokens.size(); at++) {
+			Token token = this.tokens.get(at);
+			String replacement = renames.get(token.text());
+			if (replacement != null && token.kind() == Kind.IDENTIFIER && !token.macroName()
+					&& (token.directive() == null || "define".equals(token.directive()))) {
+				this.tokens.replace(at, replacement);
+			}
+		}
+		this.macroAliases.replaceAll((_, value) -> renames.getOrDefault(value, value));
 	}
 
 	/**

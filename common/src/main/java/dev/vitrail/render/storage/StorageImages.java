@@ -6,6 +6,8 @@ import dev.vitrail.mixin.access.VulkanCommandEncoderAccessor;
 import dev.vitrail.pack.model.ImageInformation;
 import dev.vitrail.pack.model.PackTexture;
 import dev.vitrail.pack.model.TargetFormat;
+import dev.vitrail.pack.texture.CustomImageView;
+import dev.vitrail.pack.texture.CustomImages;
 import dev.vitrail.render.StalePipelines;
 import dev.vitrail.Vitrail;
 
@@ -29,13 +31,18 @@ import org.lwjgl.vulkan.VkImageCreateInfo;
 import org.lwjgl.vulkan.VkImageMemoryBarrier;
 import org.lwjgl.vulkan.VkImageSubresourceRange;
 import org.lwjgl.vulkan.VkImageViewCreateInfo;
+import org.lwjgl.vulkan.VkImageFormatListCreateInfo;
+import org.lwjgl.vulkan.VkFormatProperties;
 
 import java.nio.IntBuffer;
 import java.nio.LongBuffer;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * The storage images a pack declared with {@code image.NAME}, allocated on the Vulkan device.
@@ -50,6 +57,9 @@ import java.util.Map;
 public final class StorageImages implements AutoCloseable {
 
 	private static volatile StorageImages current = none();
+
+	/** What the device answers for a format as a view of a custom image, asked once a session. */
+	private static final Map<TargetFormat, Boolean> VIEWABLE = new ConcurrentHashMap<>();
 
 	/**
 	 * Whether a volume the pack does NOT ask to clear is emptied once, when it is created.
@@ -104,7 +114,9 @@ public final class StorageImages implements AutoCloseable {
 	 * {@link #allocated} changes. The push asks once per descriptor of every pass of the game,
 	 * Sodium's included, so the answer is a map read and never a walk.
 	 */
-	private Map<String, Bound> bindings = Map.of();
+	private volatile Map<String, Bound> bindings = Map.of();
+	private volatile Map<String, Allocated> imagesByName = Map.of();
+	private final Map<String, Bound> typedBindings = new ConcurrentHashMap<>();
 	private int lastWidth;
 	private int lastHeight;
 	private boolean laidOut;
@@ -139,12 +151,49 @@ public final class StorageImages implements AutoCloseable {
 		return bound != null && bound.storage();
 	}
 
+	/**
+	 * The names among these that ask for a view of a custom image this device cannot give: the
+	 * image's own format or the view's cannot be both sampled and stored, atomics included for a
+	 * thirty two bit integer. Asked where a program is prepared, so that the program is refused
+	 * there and nothing has to be refused while a pass records. Empty while no device answers.
+	 */
+	public static List<String> unusableViews(Collection<String> names) {
+		List<String> unusable = new ArrayList<>();
+		VulkanDevice device = vulkan();
+		if (device == null) {
+			return unusable;
+		}
+
+		for (String name : names) {
+			CustomImageView.parse(name).ifPresent(view -> CustomImages.image(view.original())
+					.map(image -> image.internalFormat().used())
+					.filter(base -> !viewable(device, base) || !viewable(device, view.format()))
+					.ifPresent(_ -> unusable.add(name)));
+		}
+
+		return unusable;
+	}
+
+	private static boolean viewable(VulkanDevice device, TargetFormat format) {
+		return VIEWABLE.computeIfAbsent(format, _ -> supportsView(device, format));
+	}
+
 	void install() {
 		current = this;
 	}
 
 	private Bound lookup(String name) {
-		return this.bindings.get(name);
+		Bound ordinary = this.bindings.get(name);
+		if (ordinary != null) return ordinary;
+		Bound cached = this.typedBindings.get(name);
+		if (cached != null) return cached;
+		var request = CustomImageView.parse(name);
+		if (request.isEmpty()) return null;
+		Allocated image = this.imagesByName.get(request.get().original());
+		if (image == null) return null;
+		return this.typedBindings.computeIfAbsent(name, _ -> new Bound(
+				image.typedView(request.get().format()),
+				image.declared.name().equals(request.get().original()), request.get().format().integer()));
 	}
 
 	/**
@@ -153,14 +202,19 @@ public final class StorageImages implements AutoCloseable {
 	 */
 	private void rebind() {
 		Map<String, Bound> bound = new HashMap<>();
+		Map<String, Allocated> named = new HashMap<>();
 		for (Allocated image : this.allocated) {
 			boolean integer = image.declared.internalFormat().used().integer();
 			bound.putIfAbsent(image.declared.name(), new Bound(image.view, true, integer));
 			image.declared.sampler().ifPresent(sampler ->
 					bound.putIfAbsent(sampler, new Bound(image.view, false, integer)));
+			named.putIfAbsent(image.declared.name(), image);
+			image.declared.sampler().ifPresent(sampler -> named.putIfAbsent(sampler, image));
 		}
 
 		this.bindings = Map.copyOf(bound);
+		this.imagesByName = Map.copyOf(named);
+		this.typedBindings.clear();
 	}
 
 	/**
@@ -672,6 +726,8 @@ public final class StorageImages implements AutoCloseable {
 
 		this.allocated.clear();
 		this.bindings = Map.of();
+		this.imagesByName = Map.of();
+		this.typedBindings.clear();
 		this.lastWidth = 0;
 		this.lastHeight = 0;
 		this.laidOut = false;
@@ -701,6 +757,8 @@ public final class StorageImages implements AutoCloseable {
 		private long image;
 		private long allocation;
 		private long view;
+		private final Map<TargetFormat, Long> alternateViews = new HashMap<>();
+		private List<TargetFormat> allowedViews = List.of();
 
 		/**
 		 * A second image of the same shape, for the volumes {@link #reanchor} moves, and nought for
@@ -734,7 +792,28 @@ public final class StorageImages implements AutoCloseable {
 			int extentHeight = Math.max(height, 1);
 			int extentDepth = Math.max(depth, 1);
 			try (MemoryStack stack = MemoryStack.stackPush()) {
+				TargetFormat base = declared.internalFormat().used();
+				List<TargetFormat> compatible = Arrays.stream(TargetFormat.values())
+						.filter(format -> CustomImageView.compatible(base, format))
+						.filter(format -> supportsView(vulkan, format)).toList();
+				if (!compatible.contains(base)) {
+					// Created as it was before any other view existed, and left to the driver to
+					// refuse: the pack gets no view of it in another format.
+					Vitrail.logger().warn("Storage image {} is declared {}, which this device does "
+							+ "not both sample and store, so it takes no view in another format",
+							declared.name(), base);
+					compatible = List.of(base);
+				}
 				VkImageCreateInfo imageInfo = VkImageCreateInfo.calloc(stack).sType$Default();
+				// These are views of one allocation, never copies. An explicit list lets the driver
+				// optimise the mutable image instead of considering every Vulkan format, and an
+				// image no other format can view is not made mutable at all.
+				if (compatible.size() > 1) {
+					VkImageFormatListCreateInfo formats = VkImageFormatListCreateInfo.calloc(stack)
+							.sType$Default().pViewFormats(stack.ints(compatible.stream()
+									.mapToInt(StorageImages::vkFormat).toArray()));
+					imageInfo.flags(VK12.VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT).pNext(formats.address());
+				}
 				imageInfo.imageType(type);
 				imageInfo.extent().set(extentWidth, extentHeight, extentDepth);
 				imageInfo.mipLevels(1);
@@ -776,6 +855,7 @@ public final class StorageImages implements AutoCloseable {
 
 				Allocated allocated = new Allocated(declared, declared.relative(), extentWidth,
 						extentHeight, extentDepth, image, allocation, viewPtr.get(0));
+				allocated.allowedViews = compatible;
 
 				// The scratch only where the volume may be moved at all, which movable settles. It
 				// is a second image of the same shape, so it is not owed to a volume nothing will
@@ -805,15 +885,40 @@ public final class StorageImages implements AutoCloseable {
 			}
 		}
 
-		/**
-		 * Frees the handles through the game's deferred queue, never inline: up to two frames are
-		 * still in flight with descriptors naming this view, and freeing under them is the device
-		 * loss a settings change to a bigger volume turned from latent into certain. Same rule as
-		 * {@code StalePipelines}: destruction has no safe instant in a running session, only a
-		 * deferred one.
-		 */
-		private void destroy(VulkanDevice vulkan) {
+		/** Created once for each requested interpretation, then reused by every descriptor. */
+		private synchronized long typedView(TargetFormat format) {
+			if (format == this.declared.internalFormat().used()) return this.view;
+			Long cached = this.alternateViews.get(format);
+			if (cached != null) return cached;
+			// A program asking for a view this device cannot give is refused where it is prepared,
+			// through unusableViews, so this only keeps a recording pass from throwing.
+			VulkanDevice device = vulkan();
+			if (!this.allowedViews.contains(format) || this.image == 0L || device == null) {
+				Vitrail.logger().warn("Custom image {} has no {} view here, so its own is bound",
+						this.declared.name(), format);
+				return this.view;
+			}
+			try (MemoryStack stack = MemoryStack.stackPush()) {
+				VkImageViewCreateInfo info = VkImageViewCreateInfo.calloc(stack).sType$Default()
+						.image(this.image).viewType(viewType(this.declared.shape())).format(vkFormat(format));
+				info.subresourceRange().set(VK12.VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1);
+				LongBuffer result = stack.callocLong(1);
+				VulkanUtils.crashIfFailure(device,
+						VK12.vkCreateImageView(device.vkDevice(), info, null, result),
+						"typed storage image view " + this.declared.name());
+				long created = result.get(0);
+				this.alternateViews.put(format, created);
+				Vitrail.logger().info("Custom image {} uses a {} view of {} memory",
+						this.declared.name(), format, this.declared.internalFormat().used());
+				return created;
+			}
+		}
+
+		/** Defers all views and their shared allocation until the GPU no longer uses them. */
+		private synchronized void destroy(VulkanDevice vulkan) {
 			long view = this.view;
+			List<Long> alternate = List.copyOf(this.alternateViews.values());
+			this.alternateViews.clear();
 			long image = this.image;
 			long allocation = this.allocation;
 			long scratch = this.scratch;
@@ -824,6 +929,7 @@ public final class StorageImages implements AutoCloseable {
 			this.scratch = 0L;
 			this.scratchAllocation = 0L;
 			GpuRecording.destroyLater(() -> {
+				for (long typed : alternate) VK12.vkDestroyImageView(vulkan.vkDevice(), typed, null);
 				if (view != 0L) {
 					VK12.vkDestroyImageView(vulkan.vkDevice(), view, null);
 				}
@@ -836,6 +942,20 @@ public final class StorageImages implements AutoCloseable {
 					Vma.vmaDestroyImage(vulkan.vma(), scratch, scratchAllocation);
 				}
 			});
+		}
+	}
+
+	/** Never advertise an interpretation that lacks either binding usage on this device. */
+	private static boolean supportsView(VulkanDevice device, TargetFormat format) {
+		try (MemoryStack stack = MemoryStack.stackPush()) {
+			VkFormatProperties properties = VkFormatProperties.calloc(stack);
+			VK12.vkGetPhysicalDeviceFormatProperties(device.vkDevice().getPhysicalDevice(),
+					vkFormat(format), properties);
+			int required = VK12.VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT | VK12.VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT;
+			if (format == TargetFormat.R32_UINT || format == TargetFormat.R32_SINT) {
+				required |= VK12.VK_FORMAT_FEATURE_STORAGE_IMAGE_ATOMIC_BIT;
+			}
+			return (properties.optimalTilingFeatures() & required) == required;
 		}
 	}
 

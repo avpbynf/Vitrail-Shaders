@@ -663,14 +663,12 @@ record Emitter(ProgramStage stage, VertexInputs inputs, List<String> bound, Alph
 	 * only way to stay on the same side of that. It is also the only answer there is for a colour
 	 * target written as {@code colorimgN}, which no directive names.
 	 * <p>
-	 * The two words are not the same statement. The one in the shader is the format the SPIR-V
-	 * declares its loads and stores with; the {@code image.} directive is the format of the image
-	 * the chain binds under that name. A pack whose two disagree is asking for a reinterpretation
-	 * nothing promised it, and it is no better off under Iris, which binds the texture under its own
-	 * internal format and leaves the shader the word it wrote
-	 * ({@code samplers/IrisImages.java:39-41}), so the access format and the declared one part
-	 * company there as well. No pack of the corpus writes a word its own directive contradicts, so
-	 * this order is choosing between two spellings of one format rather than between two formats.
+	 * For custom images, a different compatible shader format selects a typed Vulkan view of
+	 * the same allocation. GlslTranslator has already encoded that view in the uniform name, so
+	 * the explicit shader format and the bound view agree even after a translation cache hit.
+	 * This preserves the bits a pack writes atomically through an integer view and later reads
+	 * through its float or normalised sampler. A different texel size is rejected during
+	 * translation; there is no implicit conversion or second image.
 	 * <p>
 	 * The memory qualifiers are written back for the same reason, and they are what carries a
 	 * declaration the pack left bare: a pack switches its images off with the setting that

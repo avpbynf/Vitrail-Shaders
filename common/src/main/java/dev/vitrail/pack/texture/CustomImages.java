@@ -31,6 +31,7 @@ public final class CustomImages {
 
 	private static volatile Map<String, ImageInformation> byName = Map.of();
 	private static volatile Set<String> names = Set.of();
+	private static volatile String key = "";
 
 	private CustomImages() {
 	}
@@ -50,11 +51,20 @@ public final class CustomImages {
 
 		byName = Map.copyOf(images);
 		names = namesOf(reading);
+		key = images.entrySet().stream().sorted(Map.Entry.comparingByKey())
+				.map(entry -> entry.getKey() + ":" + entry.getValue().internalFormat().used().name())
+				.collect(Collectors.joining(";"));
 	}
 
 	public static void clear() {
 		byName = Map.of();
 		names = Set.of();
+		key = "";
+	}
+
+	/** Formats affect typed resource names and therefore belong in the translation cache key. */
+	public static String key() {
+		return key;
 	}
 
 	/**
@@ -79,7 +89,11 @@ public final class CustomImages {
 
 	/** Image name or sampler name hanging off an {@code image.} directive. */
 	public static boolean named(String name) {
-		return names.contains(name);
+		return names.contains(originalName(name));
+	}
+
+	public static String originalName(String name) {
+		return CustomImageView.parse(name).map(CustomImageView::original).orElse(name);
 	}
 
 	/** The same names as a set, for a reader that asks about more than one of them. */
@@ -89,8 +103,9 @@ public final class CustomImages {
 
 	/** The image uniform itself, as opposed to the sampler that reads the same volume. */
 	public static boolean storage(String name) {
-		ImageInformation image = byName.get(name);
-		return image != null && image.name().equals(name);
+		String original = originalName(name);
+		ImageInformation image = byName.get(original);
+		return image != null && image.name().equals(original);
 	}
 
 	/**
@@ -98,16 +113,19 @@ public final class CustomImages {
 	 * supplies the format at bind time and the pack often writes none.
 	 */
 	public static Optional<String> layoutFormat(String name) {
-		ImageInformation image = byName.get(name);
-		if (image == null || !image.name().equals(name)) {
+		if (!storage(name)) {
 			return Optional.empty();
 		}
-
-		return Optional.of(glslLayout(image.internalFormat().used()));
+		return viewFormat(name).map(CustomImages::glslLayout);
 	}
 
 	public static Optional<ImageInformation> image(String name) {
-		return Optional.ofNullable(byName.get(name));
+		return Optional.ofNullable(byName.get(originalName(name)));
+	}
+
+	public static Optional<TargetFormat> viewFormat(String name) {
+		return CustomImageView.parse(name).map(CustomImageView::format)
+				.or(() -> image(name).map(image -> image.internalFormat().used()));
 	}
 
 	static String glslLayout(TargetFormat format) {

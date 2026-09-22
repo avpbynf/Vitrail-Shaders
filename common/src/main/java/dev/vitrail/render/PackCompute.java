@@ -269,6 +269,14 @@ final class PackCompute implements AutoCloseable {
 					continue;
 				}
 
+				List<String> unusable = StorageImages.unusableViews(compute.get().loaded().program()
+						.samplers().stream().map(TranslatedUnit.Uniform::name).toList());
+				if (!unusable.isEmpty()) {
+					Vitrail.logger().warn("compute {} is not dispatched: it reads {} through a view "
+							+ "this device cannot sample and store in that format", path, unusable);
+					continue;
+				}
+
 				// Ahead of the roads parting and once for the program: any of the three can be
 				// missing a word, and a word means the same on all of them, that the directive it
 				// belongs to is read as absent. What that absence costs is the size said below.
