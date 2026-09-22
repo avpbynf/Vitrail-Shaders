@@ -121,6 +121,9 @@ public final class TargetPlan {
 	private static final Pattern IMAGE = Pattern.compile(
 			"^\\s*(?:" + IMAGE_QUALIFIER + ")*uniform\\s+(?:" + IMAGE_QUALIFIER
 					+ "|(?:lowp|mediump|highp)\\s+)*([iu]?image\\w*)\\s+([^;]*);.*$");
+	private static final Pattern NAME_ALIAS = Pattern.compile(
+			"^\\s*#\\s*define\\s+([A-Za-z_]\\w*)\\s+([A-Za-z_]\\w*)(?:\\s*(?://.*)?)?$");
+	private static final Pattern NAME_UNDEF = Pattern.compile("^\\s*#\\s*undef\\s+([A-Za-z_]\\w*)\\s*$");
 
 	private static final String FINAL = "final";
 
@@ -966,12 +969,24 @@ public final class TargetPlan {
 	private static List<Declaration> declared(ExpandedUnit unit, Pattern pattern) {
 		List<Declaration> names = new ArrayList<>();
 		List<String> lines = unit.lines();
+		Map<String, String> aliases = new LinkedHashMap<>();
 		boolean commented = false;
 
 		for (int line = 0; line < lines.size(); line++) {
 			boolean opened = commented;
 			commented = BlockComments.openAfter(lines.get(line), commented);
 			if (opened || !unit.isLive(line)) {
+				continue;
+			}
+
+			Matcher alias = NAME_ALIAS.matcher(lines.get(line));
+			if (alias.matches()) {
+				aliases.put(alias.group(1), alias.group(2));
+				continue;
+			}
+			Matcher undefinition = NAME_UNDEF.matcher(lines.get(line));
+			if (undefinition.matches()) {
+				aliases.remove(undefinition.group(1));
 				continue;
 			}
 
@@ -989,7 +1004,17 @@ public final class TargetPlan {
 				}
 
 				if (!name.isEmpty()) {
-					names.add(new Declaration(name, type));
+					String original = name;
+					Set<String> seen = new HashSet<>();
+					boolean cycle = false;
+					while (aliases.containsKey(name)) {
+						if (!seen.add(name)) {
+							cycle = true;
+							break;
+						}
+						name = aliases.get(name);
+					}
+					names.add(new Declaration(cycle ? original : name, type));
 				}
 			}
 		}

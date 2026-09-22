@@ -284,6 +284,8 @@ public final class ProgramTranslator {
 
 		Map<String, TranslatedUnit.Uniform> uniforms = new LinkedHashMap<>();
 		Map<String, TranslatedUnit.Uniform> samplers = new LinkedHashMap<>();
+		Map<String, String> memoryQualifiers = new LinkedHashMap<>();
+		Map<String, String> imageFormats = new LinkedHashMap<>();
 		Map<String, String> synthesized = new LinkedHashMap<>();
 		Set<String> varyings = new LinkedHashSet<>();
 
@@ -307,6 +309,8 @@ public final class ProgramTranslator {
 			// answer the same whichever stage is looked at.
 			stage.uniforms().forEach(uniform -> uniforms.putIfAbsent(uniform.name(), uniform));
 			stage.samplers().forEach(sampler -> samplers.putIfAbsent(sampler.name(), sampler));
+			stage.memoryQualifiers().forEach(memoryQualifiers::putIfAbsent);
+			stage.imageFormats().forEach(imageFormats::putIfAbsent);
 		}
 
 		Set<String> sampled = new LinkedHashSet<>();
@@ -322,7 +326,8 @@ public final class ProgramTranslator {
 		prepared.forEach((stage, prepare) -> {
 			Set<String> shadowed = new LinkedHashSet<>(elements);
 			shadowed.addAll(shadowedBy(prepare, block));
-			translated.put(stage, prepare.render(block, bound, varyings, shadowed));
+			translated.put(stage, prepare.render(block, bound, varyings, shadowed,
+					memoryQualifiers, imageFormats));
 		});
 
 		return new TranslatedProgram(Map.copyOf(translated), block, bound, Set.copyOf(sampled),

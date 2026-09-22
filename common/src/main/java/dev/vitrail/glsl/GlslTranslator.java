@@ -956,6 +956,16 @@ public final class GlslTranslator {
 			return this.translator.sampledNames();
 		}
 
+		/** The memory qualifiers a sibling stage also needs for shared opaque declarations. */
+		public Map<String, String> memoryQualifiers() {
+			return Collections.unmodifiableMap(new LinkedHashMap<>(this.translator.memoryQualifiers));
+		}
+
+		/** The format qualifiers a sibling stage also needs for shared image declarations. */
+		public Map<String, String> imageFormats() {
+			return Collections.unmodifiableMap(new LinkedHashMap<>(this.translator.imageFormats));
+		}
+
 		/**
 		 * Vertex inputs this stage declared that the mesh it is drawn from has not got, with the type
 		 * the pack gave them. Empty for anything not drawn from a mesh of the engine's own, and the
@@ -1143,13 +1153,25 @@ public final class GlslTranslator {
 
 		public TranslatedUnit render(List<TranslatedUnit.Uniform> block,
 				List<TranslatedUnit.Uniform> samplers, Set<String> varyings, Set<String> shadowed) {
-			return this.translator.render(block, samplers, varyings, shadowed);
+			return this.translator.render(block, samplers, varyings, shadowed,
+					this.translator.memoryQualifiers, this.translator.imageFormats);
+		}
+
+		public TranslatedUnit render(List<TranslatedUnit.Uniform> block,
+				List<TranslatedUnit.Uniform> samplers, Set<String> varyings, Set<String> shadowed,
+				Map<String, String> sharedMemory, Map<String, String> sharedFormats) {
+			return this.translator.render(block, samplers, varyings, shadowed, sharedMemory, sharedFormats);
 		}
 	}
 
 	private TranslatedUnit render(List<TranslatedUnit.Uniform> block,
-			List<TranslatedUnit.Uniform> samplers, Set<String> varyings, Set<String> shadowed) {
-		Emitter emitter = emitter();
+			List<TranslatedUnit.Uniform> samplers, Set<String> varyings, Set<String> shadowed,
+			Map<String, String> sharedMemory, Map<String, String> sharedFormats) {
+		Map<String, String> memory = new LinkedHashMap<>(sharedMemory);
+		memory.putAll(this.memoryQualifiers);
+		Map<String, String> formats = new LinkedHashMap<>(sharedFormats);
+		formats.putAll(this.imageFormats);
+		Emitter emitter = emitter(memory, formats);
 
 		return new TranslatedUnit(this.unit.entry(), this.stage,
 				emitter.header(block, samplers, varyings, shadowed) + body(shadowed) + "\n"
@@ -4862,9 +4884,23 @@ public final class GlslTranslator {
 	 */
 	private void liftUniforms() {
 		int[] lines = this.tokens.lineNumbers();
+		Map<String, String> aliases = new HashMap<>();
 
 		for (int index = 0; index < this.tokens.size(); index++) {
 			Token token = this.tokens.get(index);
+			if (token.kind() == Kind.HASH && this.unit.isLive(lines[index])) {
+				int name = this.tokens.macroNameAfter(index);
+				if (name >= 0 && "define".equals(token.directive())) {
+					String alias = aliasOf(name).orElse("");
+					if (alias.isEmpty()) {
+						aliases.remove(this.tokens.get(name).text());
+					} else {
+						aliases.put(this.tokens.get(name).text(), alias);
+					}
+				} else if (name >= 0 && "undef".equals(token.directive())) {
+					aliases.remove(this.tokens.get(name).text());
+				}
+			}
 			if (!token.identifier("uniform") || token.directive() != null) {
 				continue;
 			}
@@ -4879,7 +4915,7 @@ public final class GlslTranslator {
 			// stay in the body and Vulkan refuses the unit; PackChoice.load installs the table
 			// before SettingSet.resolve so the two readers agree.
 			if (this.unit.isLive(lines[index])) {
-				liftOne(index);
+				liftOne(index, aliases);
 			}
 		}
 
@@ -4904,7 +4940,7 @@ public final class GlslTranslator {
 		}
 	}
 
-	private void liftOne(int keyword) {
+	private void liftOne(int keyword, Map<String, String> aliases) {
 		int end = this.tokens.statementEnd(keyword);
 		if (end < 0) {
 			// Either a uniform block, which is already legal, or a declaration with no semicolon,
@@ -4963,7 +4999,7 @@ public final class GlslTranslator {
 		// there unread.
 		String format = opaque && LegacyGlsl.isImageType(type) ? imageFormat(parts, keywordAt) : "";
 		if (!readDeclarators(parts, cursor + 1, type, opaque ? String.join(" ", memory) : "", format,
-				opaque ? this.samplers : this.blockMembers)) {
+				opaque ? this.samplers : this.blockMembers, aliases)) {
 			return;
 		}
 
@@ -5539,6 +5575,11 @@ public final class GlslTranslator {
 	 */
 	private boolean readDeclarators(List<Integer> parts, int from, String type, String memory,
 			String format, Map<String, String> target) {
+		return readDeclarators(parts, from, type, memory, format, target, Map.of());
+	}
+
+	private boolean readDeclarators(List<Integer> parts, int from, String type, String memory,
+			String format, Map<String, String> target, Map<String, String> aliases) {
 		int cursor = from;
 		boolean any = false;
 
@@ -5552,15 +5593,16 @@ public final class GlslTranslator {
 				return false;
 			}
 
+			String name = liftedName(token.text(), aliases);
 			if (!memory.isEmpty()) {
-				this.memoryQualifiers.put(token.text(), memory);
+				this.memoryQualifiers.put(name, memory);
 			}
 
 			if (!format.isEmpty()) {
-				this.imageFormats.put(token.text(), format);
+				this.imageFormats.put(name, format);
 			}
 
-			StringBuilder declaration = new StringBuilder(type).append(' ').append(token.text());
+			StringBuilder declaration = new StringBuilder(type).append(' ').append(name);
 			cursor++;
 
 			while (cursor < parts.size() && this.tokens.get(parts.get(cursor)).operator("[")) {
@@ -5587,7 +5629,7 @@ public final class GlslTranslator {
 				}
 			}
 
-			record(target, token.text(), declaration.toString());
+			record(target, name, declaration.toString());
 			any = true;
 
 			if (cursor < parts.size() && this.tokens.get(parts.get(cursor)).operator(",")) {
@@ -5596,6 +5638,19 @@ public final class GlslTranslator {
 		}
 
 		return any;
+	}
+
+	/** A lifted declaration stands before the pack's defines, so it needs the name they spell out. */
+	private static String liftedName(String name, Map<String, String> aliases) {
+		String original = name;
+		Set<String> seen = new HashSet<>();
+		while (aliases.containsKey(name)) {
+			if (!seen.add(name)) {
+				return original;
+			}
+			name = aliases.get(name);
+		}
+		return name;
 	}
 
 	private void record(Map<String, String> target, String name, String declaration) {
@@ -5610,10 +5665,10 @@ public final class GlslTranslator {
 	 * The answers the header is written from, taken once every pass has run. Nothing here is
 	 * written back, which is why {@link Emitter} is handed these rather than this object.
 	 */
-	private Emitter emitter() {
+	private Emitter emitter(Map<String, String> memory, Map<String, String> formats) {
 		return new Emitter(this.stage, this.inputs, this.bound, this.alphaTest, this.extensions,
 				this.engineDefines,
-				this.memoryQualifiers, this.imageFormats, this.used, this.declaredNames,
+				memory, formats, this.used, this.declaredNames,
 				this.synthesized,
 				this.volumes.read(), this.packOutputs, this.maxFragmentOutput, this.owedOutputs,
 				this.splits, this.gameTextureMatrix,
@@ -5680,8 +5735,11 @@ public final class GlslTranslator {
 			}
 
 			Token token = this.tokens.get(index);
-			if (token.kind() == Kind.IDENTIFIER && this.samplers.containsKey(token.text())) {
-				sampled.add(token.text());
+			if (token.kind() == Kind.IDENTIFIER) {
+				String name = liftedName(token.text(), this.macroAliases);
+				if (this.samplers.containsKey(name)) {
+					sampled.add(name);
+				}
 			}
 		}
 

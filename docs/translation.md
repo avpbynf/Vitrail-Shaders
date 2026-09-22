@@ -218,6 +218,12 @@ the engine binds a buffer by name. At most one stage can then read what it think
 stages of a program therefore get a single block holding the union of their uniforms, in a
 canonical order.
 
+Opaque uniforms share that program-wide order as well. A sampler declared under a one-name macro
+has to be recorded under the name that macro expands to at the declaration: its new header stands
+before the pack's `#define`, while uses in the body still expand under it. An image declared by
+only one stage must carry its format and memory qualifiers into the sibling's shared header too;
+otherwise shaderc refuses a bare image in the stage that never asked for it.
+
 **Varyings.** They are matched by name, and the two failure directions are not symmetric: a varying
 the fragment declares without the vertex emitting it is refused loudly, while the reverse is silent
 and shifts the locations of everything after it.
