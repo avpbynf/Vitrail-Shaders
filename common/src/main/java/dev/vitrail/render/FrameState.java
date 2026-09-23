@@ -1,5 +1,6 @@
 package dev.vitrail.render;
 
+import dev.vitrail.Vitrail;
 import dev.vitrail.dh.DhDepth;
 import dev.vitrail.pack.id.NameIds;
 import dev.vitrail.pack.model.RenderStage;
@@ -10,6 +11,7 @@ import dev.vitrail.uniform.values.FrameSmoothed;
 import dev.vitrail.uniform.WorldState;
 
 import com.mojang.blaze3d.pipeline.RenderTarget;
+import net.minecraft.ChatFormatting;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.TextureFilteringMethod;
@@ -24,6 +26,7 @@ import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.Holder;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.data.AtlasIds;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.util.Mth;
 import net.minecraft.world.InteractionHand;
@@ -445,6 +448,61 @@ public final class FrameState implements WorldState {
 		this.frameCounter = (this.frameCounter + 1) % FRAME_WRAP;
 	}
 
+	/**
+	 * The two faults already said in the chat, one flag each, so that a state the engine reaches on
+	 * every frame is still said once.
+	 * <p>
+	 * Held here rather than in {@link CameraBob}, which is a matrix, a capture and a logger and names
+	 * no Minecraft class at all: the out-of-game harness measures the translation tree, that tree
+	 * links to this class, and a class that pulls a window in behind it cannot be compiled where no
+	 * game is running.
+	 */
+	private static boolean saidNotTaken;
+	private static boolean saidUntrusted;
+
+	/**
+	 * Says in the chat the first time the walk bob stops being published where a pack expects it.
+	 * <p>
+	 * <strong>In the chat and not only in the log, because the two states look alike in a picture and
+	 * a log is not always within reach.</strong> What the engine says about the split it says once,
+	 * at the first frame that draws, so a session that starts well and goes wrong later has said
+	 * nothing since, and the difference between the two is visible only while the player walks. The
+	 * third answer, the split holding, is the ordinary one and says nothing: a line per frame saying
+	 * that all is well is the line that buries the one that is not.
+	 */
+	private static void sayBobSplit() {
+		CameraBob.Split answer = CameraBob.lastSplit();
+		if (answer == CameraBob.Split.NOT_TAKEN) {
+			if (saidNotTaken) {
+				return;
+			}
+
+			saidNotTaken = true;
+			sayWalkBob("nothing took it out of the projection this frame, so a pack reads it there, "
+					+ "where OptiFine never put it and anything placed from a direction slides");
+		} else if (answer == CameraBob.Split.UNTRUSTED) {
+			if (saidUntrusted) {
+				return;
+			}
+
+			saidUntrusted = true;
+			sayWalkBob("it stays in the projection for the rest of this session, so a pack reads it "
+					+ "there, where OptiFine never put it. The two matrices parted at "
+					+ CameraBob.lastMismatch());
+		}
+	}
+
+	/** One red line under the mod's own name, and nothing at all outside a world. */
+	private static void sayWalkBob(String words) {
+		Minecraft minecraft = Minecraft.getInstance();
+		if (minecraft == null || minecraft.player == null || minecraft.gui.screen() != null) {
+			return;
+		}
+
+		minecraft.gui.hud.getChat().addClientSystemMessage(Component.literal(
+				"[" + Vitrail.MOD_NAME + "] Walk bob: " + words).withStyle(ChatFormatting.RED));
+	}
+
 	private void advanceView(Minecraft minecraft, CameraRenderState cameraState) {
 		int renderDistance = minecraft.options.getEffectiveRenderDistance();
 		Matrix4fc rendered = CapturedProjection.rendered(cameraState.projectionMatrix);
@@ -454,6 +512,7 @@ public final class FrameState implements WorldState {
 		// the matrix the level was really drawn with: a term this engine failed to intercept would
 		// otherwise be missing from one and not made up for by the other.
 		boolean split = CameraBob.agrees(cameraState.projectionMatrix, rendered);
+		sayBobSplit();
 
 		// The render distance in blocks, which is a quarter of the plane the game actually clips
 		// at: Camera sets depthFar to max(renderDistance * 4, cloudRange * 16). That quarter is

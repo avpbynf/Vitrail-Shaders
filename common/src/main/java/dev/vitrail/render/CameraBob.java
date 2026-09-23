@@ -69,7 +69,52 @@ public final class CameraBob {
 	private static boolean warnedNotTaken;
 	private static boolean warnedMismatch;
 
+	/**
+	 * One flag for the third way this check can end, which is the one that is not a fault at all: a
+	 * frame that drew with nothing captured to compare against.
+	 */
+	private static boolean warnedUncaptured;
+
 	private static boolean announced;
+
+	/**
+	 * Which of the three answers {@link #agrees} gave on the last frame it was asked. It exists for
+	 * one reader, the F3 line, and for one case: what this class says about the split is said once
+	 * and never again, so a session that starts well and goes wrong later has said nothing at all.
+	 * The two pictures differ only while the player walks, which is the worst moment to be reading a
+	 * file, and a player who cannot open one is left with a fault they can see and no word for it.
+	 */
+	private static Split split = Split.HELD;
+
+	/**
+	 * Where the two matrices parted on the frame the split was refused, in the chat's words, and
+	 * empty while they have not. It is said rather than only counted because the size of the
+	 * difference is what names the fault and nothing else does.
+	 */
+	private static String mismatch = "";
+
+	/**
+	 * The three answers of {@link #agrees}, in the order they are worth reading: the first is what
+	 * every session stands in and each of the other two names a different fault.
+	 */
+	public enum Split {
+		/** The split held, so a pack reads the bob in the model view, where OptiFine put it. */
+		HELD,
+		/** Nothing took a bob this frame, so a pack reads one in the projection. */
+		NOT_TAKEN,
+		/** The two matrices did not multiply back to the truth, so the split is off. */
+		UNTRUSTED
+	}
+
+	/** What the last frame's split came to, which is what the F3 line reads. */
+	public static Split lastSplit() {
+		return split;
+	}
+
+	/** Where the two matrices parted, or empty while they have not. */
+	public static String lastMismatch() {
+		return mismatch;
+	}
 
 	private CameraBob() {
 	}
@@ -138,6 +183,8 @@ public final class CameraBob {
 		// no bob in it: the four terms would then be in neither of the two matrices the pack is
 		// handed, which is worse than the frame that failed.
 		if (!trusted) {
+			split = Split.UNTRUSTED;
+
 			return false;
 		}
 
@@ -152,7 +199,32 @@ public final class CameraBob {
 						+ "screen from a direction will slide as the player walks");
 			}
 
+			split = Split.NOT_TAKEN;
+
 			return false;
+		}
+
+		// The check has nothing to check against, and that is not a fault. What is handed in then is
+		// the camera's OWN projection, which is the clean one, so the two sides of the comparison
+		// would be `camera times TAKEN` and `camera`: they differ by the bob and by nothing else, so
+		// the check fails on every frame a player is walking and takes the split down for the
+		// session on a frame that was in fact drawn exactly as this engine and every pack expect.
+		//
+		// The capture exists to catch a term the four interceptions do not see. With nothing
+		// captured there is nothing to catch it with, and refusing the split does not make the check
+		// work: it only publishes the bob in the projection, which is the one place a pack cannot
+		// read it. A live capture is a witness, and a missing one is not a disagreement.
+		if (!CapturedProjection.present()) {
+			if (!warnedUncaptured) {
+				warnedUncaptured = true;
+				Vitrail.logger().warn("The level's projection was not captured on a frame that drew, so "
+						+ "the walk bob cannot be checked against it. The split is kept, and the bob "
+						+ "goes to the model view where a pack reads one");
+			}
+
+			split = Split.HELD;
+
+			return true;
 		}
 
 		CHECK.set(camera).mul(TAKEN);
@@ -161,6 +233,8 @@ public final class CameraBob {
 		// coefficient by more than a thousandth.
 		if (!CHECK.equals(rendered, 1.0E-4F)) {
 			trusted = false;
+			split = Split.UNTRUSTED;
+			mismatch = detail(CHECK, rendered);
 			if (!warnedMismatch) {
 				warnedMismatch = true;
 				Vitrail.logger().warn("The camera's projection times the bob is not the projection the "
@@ -179,7 +253,43 @@ public final class CameraBob {
 					+ "expects them. The two multiply back to the matrix the level was drawn with");
 		}
 
+		split = Split.HELD;
+
 		return true;
+	}
+
+	/**
+	 * The largest term of the difference between the two matrices, where it sits, and whether a
+	 * capture was there at all to be compared against.
+	 * <p>
+	 * <strong>The size is what says which fault this is, and nothing else does.</strong> A term off
+	 * by a fraction is this engine failing to see part of one of the four effects. A term off by the
+	 * whole of a projection is the camera state handed to the comparison not being the one the level
+	 * was drawn with, which no arithmetic in this class can mend. The two want different repairs,
+	 * they look identical in a line of a log, and a printer that says which is cheaper than either.
+	 */
+	private static String detail(Matrix4fc left, Matrix4fc right) {
+		float worst = 0.0F;
+		int row = 1;
+		int column = 1;
+
+		for (int c = 0; c < 4; c++) {
+			for (int r = 0; r < 4; r++) {
+				float difference = Math.abs(left.get(c, r) - right.get(c, r));
+				if (difference > worst) {
+					worst = difference;
+					row = r + 1;
+					column = c + 1;
+				}
+			}
+		}
+
+		String capture = CapturedProjection.present()
+				? "a capture was there, so the two really differ"
+				: "no capture was there, so the comparison was against the camera's own projection";
+
+		return "row " + row + " column " + column + " by " + Math.round(worst * 1000.0F)
+				+ "/1000, and " + capture;
 	}
 
 	/** Forgets the frame's capture, so a frame that took nothing is not handed the last one's. */

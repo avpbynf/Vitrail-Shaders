@@ -2,6 +2,7 @@ package dev.vitrail.screen;
 
 import dev.vitrail.HostReport;
 import dev.vitrail.Vitrail;
+import dev.vitrail.render.CameraBob;
 import dev.vitrail.render.PackChain;
 import dev.vitrail.render.PackChoice;
 import dev.vitrail.settings.PackSession;
@@ -74,6 +75,7 @@ public final class VitrailDebugEntry implements DebugScreenEntry {
 			displayer.addToGroup(GROUP, profileLine(session));
 			if (level != null) {
 				shadowLines(displayer);
+				bobLine(displayer);
 			}
 		}, () -> displayer.addToGroup(GROUP, PREFIX + undrawnLine()));
 	}
@@ -104,6 +106,26 @@ public final class VitrailDebugEntry implements DebugScreenEntry {
 		int total = walk == null ? 0 : walk.total();
 		displayer.addToGroup(GROUP, PREFIX + "Shadows: C: " + drawn + "/" + total
 				+ " D: " + Minecraft.getInstance().options.getEffectiveRenderDistance());
+	}
+
+	/**
+	 * Where the walk bob went, which is the one line here Iris has no counterpart for.
+	 * <p>
+	 * <strong>On the screen rather than only in the log, because the answer is invisible standing
+	 * still and the log is not always within reach.</strong> What the engine says about the split it
+	 * says once, at the first frame that draws, and a session that starts well and goes wrong later
+	 * has said nothing since. The two states are then indistinguishable to a player who cannot open
+	 * a file, which is the one reader a reading is worth the least without. The line names the state
+	 * a capture belongs to, the rule every other reading here follows, and it is one lookup.
+	 */
+	private static void bobLine(DebugScreenDisplayer displayer) {
+		String words = switch (CameraBob.lastSplit()) {
+			case HELD -> "model view";
+			case NOT_TAKEN -> "projection, none taken";
+			case UNTRUSTED -> "projection, split off";
+		};
+
+		displayer.addToGroup(GROUP, PREFIX + "Walk bob: " + words);
 	}
 
 	/**

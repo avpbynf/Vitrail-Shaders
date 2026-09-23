@@ -86,6 +86,15 @@ public final class CapturedProjection {
 		return fallback;
 	}
 
+	/**
+	 * Whether the level's projection was captured this frame, which is the question the report of a
+	 * mismatch turns on: a difference against a capture is a missing term, and a difference against
+	 * the fallback is the camera state not being the one the level was drawn with.
+	 */
+	static boolean present() {
+		return captured;
+	}
+
 	/** Forgets the capture, so that a frame nothing captured falls back rather than repeating. */
 	public static void clear() {
 		captured = false;

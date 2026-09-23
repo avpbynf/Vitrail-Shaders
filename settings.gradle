@@ -8,6 +8,15 @@ pluginManagement {
 	}
 }
 
+plugins {
+	// The toolchain this build wants is pinned in gradle.properties, and Gradle only looks for it
+	// where a JDK is conventionally installed. One installed anywhere else reads as absent, and a
+	// bare clone then fails on "no matching toolchains" with the JDK sitting right there on disk.
+	// The resolver answers that by fetching the version asked for into the Gradle user home, so the
+	// toolchain is a property of the build rather than of whoever's machine is running it.
+	id "org.gradle.toolchains.foojay-resolver-convention" version "1.0.0"
+}
+
 rootProject.name = "vitrail"
 
 include("common")
