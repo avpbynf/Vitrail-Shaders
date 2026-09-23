@@ -102,7 +102,7 @@ public final class NameIds {
 		List<String> problems = new ArrayList<>();
 		Pattern lines = kind.entry();
 
-		file.walk(defines, line -> {
+		file.walkDefining(defines, (line, live) -> {
 			Matcher entry = lines.matcher(line);
 			if (!entry.matches()) {
 				return;
@@ -116,7 +116,7 @@ public final class NameIds {
 				return;
 			}
 
-			for (String token : Macros.expand(entry.group(2).trim(), defines).split("\\s+", -1)) {
+			for (String token : Macros.expand(entry.group(2).trim(), live).split("\\s+", -1)) {
 				if (token.isEmpty()) {
 					continue;
 				}

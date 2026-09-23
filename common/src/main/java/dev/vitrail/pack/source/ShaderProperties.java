@@ -855,11 +855,11 @@ public final class ShaderProperties {
 	public List<CustomUniform> customUniforms(Map<String, String> defines) {
 		List<CustomUniform> uniforms = new ArrayList<>();
 
-		PropertiesFile.walk(this.lines, defines, line -> {
+		PropertiesFile.walkDefining(this.lines, defines, (line, live) -> {
 			Matcher uniform = CUSTOM_UNIFORM.matcher(line);
 			if (uniform.matches()) {
 				uniforms.add(new CustomUniform(uniform.group(1).equals("uniform"), uniform.group(2),
-						uniform.group(3), Macros.expand(uniform.group(4).trim(), defines)));
+						uniform.group(3), Macros.expand(uniform.group(4).trim(), live)));
 			}
 		});
 
@@ -1089,13 +1089,14 @@ public final class ShaderProperties {
 	 * settings ({@code ShaderProperties} around the {@code image.} handler). Here the
 	 * conditionals are evaluated against {@code defines} and a size written as a setting name
 	 * is looked up in that table, which is what lets Complementary size a volume with
-	 * {@code COLORED_LIGHTING} itself. A seventeenth image is dropped, which is Iris's ceiling.
+	 * {@code COLORED_LIGHTING} itself; a name the file defines above the line is looked up there
+	 * too. A seventeenth image is dropped, which is Iris's ceiling.
 	 */
 	public ImageInformation.Reading imageDirectives(Map<String, String> defines) {
 		List<ImageInformation> images = new ArrayList<>();
 		List<String> dropped = new ArrayList<>();
 
-		PropertiesFile.walk(this.lines, defines, line -> {
+		PropertiesFile.walkDefining(this.lines, defines, (line, live) -> {
 			Matcher image = IMAGE.matcher(line);
 			if (!image.matches()) {
 				return;
@@ -1109,7 +1110,7 @@ public final class ShaderProperties {
 				return;
 			}
 
-			String reason = ImageInformation.parse(name, value, defines, images);
+			String reason = ImageInformation.parse(name, value, live, images);
 			if (reason != null) {
 				dropped.add("image." + name + " = " + value + ": " + reason);
 			}

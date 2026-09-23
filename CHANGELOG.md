@@ -42,6 +42,12 @@ what the next one holds.
   nought for both, so a program that placed its corners from them compiled and drew nothing. Both
   now read the quad's own position and texture coordinate under the type the pack declared, as
   under Iris.
+- **A properties file's own defines now count for its sizes, uniforms and identifiers.**
+  A `#define` or `#undef` written there was ignored, so a later condition on that name was decided
+  as if it had never been written, and an image size, a custom uniform or an item or entity
+  identifier using it came out wrong or not at all. All of them now read the name as the line
+  above left it, as under Iris. Complementary with Euphoria Patches is the pack that shows it: its
+  profiles that set entity shadows to off now turn them off.
 
 ## 0.11.0-beta
 

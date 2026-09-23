@@ -2,9 +2,11 @@ package dev.vitrail.pack.source;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -22,6 +24,8 @@ import java.util.regex.Pattern;
 public final class PropertiesFile {
 
 	private static final Pattern DIRECTIVE = Pattern.compile("^\\s*#\\s*(if|ifdef|ifndef|else|elif|endif)\\b.*$");
+	private static final Pattern DEFINE = Pattern.compile("^\\s*#define\\s+([A-Za-z_]\\w*)(.*)$");
+	private static final Pattern UNDEF = Pattern.compile("^\\s*#undef\\s+([A-Za-z_]\\w*).*$");
 
 	private final String name;
 	private final List<String> lines;
@@ -63,24 +67,60 @@ public final class PropertiesFile {
 	 * A continuation therefore joins across a directive line, which is the same thing that happens
 	 * once the directive has been removed. Only the indentation of the joined line is swallowed,
 	 * never a blank line.
+	 * <p>
+	 * A {@code #define} or {@code #undef} on a live line changes the table every later conditional
+	 * is decided against, and is not handed over as a line. The reference runs one preprocessor
+	 * over the whole file ({@code shaderpack/preprocessor/PropertiesPreprocessor.java:109-120}), so
+	 * a name a file defines for itself is a name every later condition sees. The values this
+	 * engine substitutes names into, image sizes, custom uniforms and the item and entity tables,
+	 * see it too through {@link #walkDefining}. Two values still do not: a {@code program.enabled}
+	 * expression, whose names answer to the pack's switches rather than to a substitution, and a
+	 * {@code block.properties} entry, which takes no substitution here at all; no pack of the corpus
+	 * writes either over a name its file defines on a live line. Only a line starting with
+	 * {@code #define} or {@code #undef} exactly counts, indentation aside, as there ({@code :95}): a
+	 * space after the {@code #} makes it a comment.
 	 */
 	public void walk(Map<String, String> defines, Consumer<String> line) {
 		walk(this.lines, defines, line);
 	}
 
+	/** The same walk, handing each line over with the table in force where it stands. */
+	public void walkDefining(Map<String, String> defines, BiConsumer<String, Map<String, String>> line) {
+		walkDefining(this.lines, defines, line);
+	}
+
 	/** The same walk over lines held elsewhere, so that {@link ShaderProperties} reads its own. */
 	static void walk(List<String> lines, Map<String, String> defines, Consumer<String> line) {
+		walkDefining(lines, defines, (text, _) -> line.accept(text));
+	}
+
+	/** The same walk, handing each line over with the table in force where it stands. */
+	static void walkDefining(List<String> lines, Map<String, String> defines,
+			BiConsumer<String, Map<String, String>> line) {
+		Map<String, String> live = new LinkedHashMap<>(defines);
 		ConditionStack conditions = new ConditionStack();
 		StringBuilder joined = null;
 
 		for (String text : lines) {
 			Matcher directive = DIRECTIVE.matcher(text);
 			if (directive.matches()) {
-				apply(directive.group(1), text, conditions, defines);
+				apply(directive.group(1), text, conditions, live);
 				continue;
 			}
 
 			if (!conditions.active()) {
+				continue;
+			}
+
+			Matcher defined = DEFINE.matcher(text);
+			if (defined.matches()) {
+				live.put(defined.group(1), defined.group(2).replaceFirst("//.*$", "").trim());
+				continue;
+			}
+
+			Matcher undefined = UNDEF.matcher(text);
+			if (undefined.matches()) {
+				live.remove(undefined.group(1));
 				continue;
 			}
 
@@ -93,7 +133,7 @@ public final class PropertiesFile {
 			}
 
 			if (!continues) {
-				line.accept(joined.toString());
+				line.accept(joined.toString(), live);
 				joined = null;
 			}
 		}
@@ -101,7 +141,7 @@ public final class PropertiesFile {
 		// A file whose last line asks to be continued. The pack is wrong and the value is still
 		// worth handing over, since everything before the backslash is a complete declaration.
 		if (joined != null) {
-			line.accept(joined.toString());
+			line.accept(joined.toString(), live);
 		}
 	}
 
