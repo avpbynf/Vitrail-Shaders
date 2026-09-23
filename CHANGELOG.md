@@ -37,6 +37,11 @@ what the next one holds.
   message when that setting is off, a message Iris only writes to the log. The engine handed it on
   to the shader compiler, which refused the program, and the whole pack with it. Such a message no
   longer stops anything, and the pack loads.
+- **A full screen program reading the quad's corners by their core profile names draws.** A pack
+  reading `vaPosition` or `vaUV0` in a core profile composite, deferred or final was handed
+  nought for both, so a program that placed its corners from them compiled and drew nothing. Both
+  now read the quad's own position and texture coordinate under the type the pack declared, as
+  under Iris.
 
 ## 0.11.0-beta
 

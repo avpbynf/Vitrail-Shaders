@@ -45,7 +45,8 @@ record Emitter(ProgramStage stage, VertexInputs inputs, List<String> bound, Alph
 		boolean mainWrapped, boolean depthEpilogue, boolean terrainPrologue,
 		boolean distantPrologue, boolean entityWrapped, boolean linesWrapped,
 		boolean alphaEpilogue, boolean covers,
-		boolean wrapsFragment, boolean ordered, boolean namesFragDepth, boolean makesOverlayColour) {
+		boolean wrapsFragment, boolean ordered, boolean namesFragDepth, boolean makesOverlayColour,
+		boolean coreProfile) {
 
 	private static final String VERSION = "#version 460 core";
 
@@ -130,7 +131,12 @@ record Emitter(ProgramStage stage, VertexInputs inputs, List<String> bound, Alph
 			switch (this.inputs) {
 				case FULLSCREEN -> {
 					lines.addAll(LegacyGlsl.FULLSCREEN_ATTRIBUTES);
-					lines.addAll(VertexPrologue.tail(this.used, this.synthesized));
+					VertexPrologue.globals(this.used, this.synthesized, Map.of()).forEach((name, type) -> {
+						String element = this.coreProfile ? LegacyGlsl.fullscreenElement(name, type) : null;
+						lines.add(element != null
+								? "#define " + name + " " + element
+								: VertexPrologue.declaration(name, type));
+					});
 				}
 				case TERRAIN, TERRAIN_SEPARATE_AO -> lines.addAll(SodiumVertex.prologue(this.bound,
 						this.used, this.synthesized, this.inputs.separateAo()));

@@ -531,6 +531,12 @@ public final class GlslTranslator {
 	private final Map<String, String> synthesized = new LinkedHashMap<>();
 
 	/**
+	 * Whether the unit's version line sends it down Iris's core path: a {@code core} profile, or
+	 * version 150 and up with no profile named ({@code TransformPatcher.java:151}).
+	 */
+	private boolean coreProfile;
+
+	/**
 	 * Varyings this stage takes in, declared at file scope on a branch that is taken. Empty for a
 	 * vertex stage, whose file scope {@code in} is an attribute and a different matter entirely.
 	 */
@@ -1607,6 +1613,8 @@ public final class GlslTranslator {
 				}
 			} else if (!token.directive().equals("version")) {
 				continue;
+			} else {
+				this.coreProfile = declaresCoreProfile(index);
 			}
 
 			this.tokens.blankDirective(index);
@@ -2173,6 +2181,26 @@ public final class GlslTranslator {
 	 * one name that is a state and not an extension: hoisting it would turn every extension the
 	 * compiler knows on at once.
 	 */
+	private boolean declaresCoreProfile(int directive) {
+		int version = 0;
+		String profile = null;
+		for (int index = directive + 1; index < this.tokens.size(); index++) {
+			Token token = this.tokens.get(index);
+			if (token.kind() == Kind.NEWLINE) {
+				break;
+			}
+
+			if (token.kind() == Kind.NUMBER && version == 0
+					&& token.text().chars().allMatch(Character::isDigit)) {
+				version = Integer.parseInt(token.text());
+			} else if (token.kind() == Kind.IDENTIFIER && !token.text().equals("version")) {
+				profile = token.text();
+			}
+		}
+
+		return "core".equals(profile) || (profile == null && version >= 150);
+	}
+
 	private String extensionNamed(int directive) {
 		for (int index = directive + 1; index < this.tokens.size(); index++) {
 			Token token = this.tokens.get(index);
@@ -5592,7 +5620,8 @@ public final class GlslTranslator {
 				this.gameModelView, this.softRewrites, this.trigCalls, this.hashCalls,
 				this.packBuiltinCalls, this.mainWrapped, this.depthEpilogue, this.terrainPrologue,
 				this.distantPrologue, this.entityWrapped, this.linesWrapped, this.alphaEpilogue, this.covers,
-				wrapsFragment(), this.ordered, this.namesFragDepth, this.makesOverlayColour);
+				wrapsFragment(), this.ordered, this.namesFragDepth, this.makesOverlayColour,
+				this.coreProfile);
 	}
 
 	/**
