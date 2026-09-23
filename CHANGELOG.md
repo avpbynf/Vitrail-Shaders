@@ -28,6 +28,10 @@ what the next one holds.
   own sine came out enormous there, and the pack's water kept stepping until the graphics driver
   gave up and the game closed with a lost device. The sine now stays between minus one and one for
   any value, as the driver's does, and nothing changes wherever it already did.
+- **Photon loads with cloud shadows turned off.** The pack stops one of its programs with an error
+  message when that setting is off, a message Iris only writes to the log. The engine handed it on
+  to the shader compiler, which refused the program, and the whole pack with it. Such a message no
+  longer stops anything, and the pack loads.
 
 ## 0.11.0-beta
 

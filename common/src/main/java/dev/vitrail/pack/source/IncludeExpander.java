@@ -57,6 +57,13 @@ import java.util.regex.Pattern;
  * the compiler would refuse where the reference never shows it a conditional at all. They are
  * rewritten into a directive GLSL will take, or commented out where there is nothing for them to
  * close: see {@link #defined} and {@link #unopened}.
+ * <p>
+ * A pack's {@code #error} becomes a comment too, in a branch taken or not. jcpp hands it to the
+ * reference's listener, which logs it and lets the program build ({@code GlslCollectingListener}
+ * extends {@code DefaultPreprocessorListener}). Photon guards several programs that way, and its
+ * properties carry no line turning {@code prepare} off with cloud shadows, so that program was
+ * refused here and the whole pack with it. The ones this reader writes itself, a missing or
+ * cyclic include, are not the pack's and stay errors.
  */
 public final class IncludeExpander {
 
@@ -95,6 +102,7 @@ public final class IncludeExpander {
 	private static final Pattern DEFINE = Pattern.compile("^\\s*#\\s*define\\s+([A-Za-z_]\\w*)\\s*(.*)$");
 	private static final Pattern UNDEF = Pattern.compile("^\\s*#\\s*undef\\s+([A-Za-z_]\\w*).*$");
 	private static final Pattern VERSION = Pattern.compile("^\\s*#\\s*version\\s+(.*)$");
+	private static final Pattern ERROR = Pattern.compile("^\\s*#\\s*error\\b.*$");
 
 	/** The two comment shapes a directive's tail is stripped of, compiled once for every line. */
 	private static final Pattern LINE_COMMENT = Pattern.compile("//.*");
@@ -105,7 +113,7 @@ public final class IncludeExpander {
 	private final boolean partOfALoad;
 
 	/**
-	 * The conditionals this pack writes loosely, each said once, in the order they were met. Held
+	 * The directives this pack writes loosely, each said once, in the order they were met. Held
 	 * on the expander and not on a unit: a loose directive lives in a shared body, so it is met
 	 * again in every program that includes it, and one line per program would bury it.
 	 */
@@ -270,6 +278,16 @@ public final class IncludeExpander {
 				continue;
 			}
 
+			if (ERROR.matcher(line).matches()) {
+				report(conditions, state, relative, logical,
+						"the reference only logs it, so it is not written out");
+				// A block comment the message opens still has to open, or its body would be code.
+				state.emit(BlockComments.openAfter(line, false)
+						? "/* error not written out */ /*"
+						: "// error not written out: " + line.trim(), conditions.active());
+				continue;
+			}
+
 			Matcher include = INCLUDE.matcher(line);
 			if (include.matches()) {
 				state.seen++;
@@ -339,8 +357,9 @@ public final class IncludeExpander {
 	 * takes the last backslash with the blank line and the comment ends there, and a joined line
 	 * written out would end with the two backslashes left, which the compiler would then take
 	 * with the line of code below. Sixteen units lost a declaration that way. The lines written out
-	 * joined are the ones this reader had to rewrite, a {@code #define} a setting changed and a
-	 * conditional the pack wrote loosely, and no pack of the corpus continues either of those.
+	 * joined are the ones this reader had to rewrite, a {@code #define} a setting changed, a
+	 * conditional the pack wrote loosely and an {@code #error} turned into a comment, and no pack
+	 * of the corpus continues any of those.
 	 */
 	private record Logical(String text, int number, List<String> physical) {
 	}
