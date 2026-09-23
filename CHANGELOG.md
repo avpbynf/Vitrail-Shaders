@@ -63,6 +63,12 @@ what the next one holds.
   than beside the camera. BSL and Bliss rebuild positions on screen assuming the projection has no
   bob in it, so their shadows, and anything else placed that way, slid with every step. The bob now
   stays where packs expect it, as on Iris, whatever tilts the camera.
+- **iterationRP draws its lighting.** Its lighting programs store into the pack's buffers from
+  full screen and world passes rather than from a compute, read its light volumes as integers
+  where they were stored as colours, and name several of them through the pack's own defines.
+  None of the three was served, so the scene stayed dark. All three are now served as under Iris,
+  and a program whose buffer or view this graphics card cannot store into is set aside with a
+  line in the log saying so.
 
 ## 0.11.0-beta
 
