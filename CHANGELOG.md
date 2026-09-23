@@ -48,6 +48,11 @@ what the next one holds.
   identifier using it came out wrong or not at all. All of them now read the name as the line
   above left it, as under Iris. Complementary with Euphoria Patches is the pack that shows it: its
   profiles that set entity shadows to off now turn them off.
+- **A compute reading a texture that could not be loaded still runs.** A pack naming a texture
+  that could not be read lost every compute pass reading it, taken out of the frame. Such a
+  compute now reads what the full screen pass beside it reads, and runs. A game texture that no
+  loaded resource pack ships now reads the game's missing texture in every pass, as under Iris,
+  where it read black.
 
 ## 0.11.0-beta
 

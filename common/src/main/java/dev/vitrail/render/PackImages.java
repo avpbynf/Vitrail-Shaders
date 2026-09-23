@@ -13,8 +13,10 @@ import dev.vitrail.render.pbr.PbrAtlases;
 import dev.vitrail.uniform.NoiseTexture;
 
 import com.mojang.blaze3d.GpuFormat;
+import com.mojang.blaze3d.platform.NativeImage;
 
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.texture.MissingTextureAtlasSprite;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.resources.Resource;
 
@@ -37,7 +39,7 @@ import java.util.Optional;
  * reading be measured against the eight packs without starting a game, which is where the atlas was
  * proved right texel by texel.
  * <p>
- * One API of the game is named, in {@link #gameResource}, because a pack may name a texture the
+ * The game's API is named in {@link #gameResource} alone, because a pack may name a texture the
  * game owns instead of shipping one; it is asked for defensively so that a measurement taken
  * outside a client loses that texture rather than the whole reading.
  * <p>
@@ -47,7 +49,9 @@ import java.util.Optional;
  * target it shares a name with. That fall back is the failure worth a class of its own:
  * Complementary points {@code texture.deferred.colortex3} at a cloud and water lookup table, and
  * letting the name go back to colour target three would have its deferred read the scene as that
- * table, which is a picture nobody would question.
+ * table, which is a picture nobody would question. A texture of the game that no loaded resource
+ * pack ships in a readable form is the other exception: it reads the game's missing texture, as it
+ * does under Iris.
  */
 final class PackImages {
 
@@ -251,8 +255,10 @@ final class PackImages {
 
 	/**
 	 * A texture the GAME owns, named by the pack as {@code namespace:path} and read out of the
-	 * resource packs the client has loaded rather than out of the shader pack. Null when the client
-	 * has nothing under that name, with the reason in the notes.
+	 * resource packs the client has loaded rather than out of the shader pack. The game's missing
+	 * texture when no loaded pack ships a readable image under that name, which is what Iris binds
+	 * then ({@code pipeline/CustomTextureManager.java:156}); null only for a name the client cannot
+	 * be asked for at all. The reason is in the notes.
 	 * <p>
 	 * The one place in this class that names an API of the game, and it is asked defensively for
 	 * the reason the rest of the class avoids it: outside a running client there is no client to
@@ -273,8 +279,8 @@ final class PackImages {
 		// two parts and drops the rest, which is what Iris makes of such a name.
 		// Limit 0, the one-argument reading. It matters which one: tryBuild accepts an empty path,
 		// so a name written 'minecraft:' would build an identifier under any limit that kept the
-		// empty term, and the black pixel below would be blamed on a file no resource pack ships
-		// rather than on a name this client cannot be asked for.
+		// empty term, and the missing texture below would be served for a name this client cannot
+		// be asked for, which reads black.
 		String[] parts = path.split(":", 0);
 		Identifier location = parts.length < 2 ? null : Identifier.tryBuild(parts[0], parts[1]);
 		Minecraft client = Minecraft.getInstance();
@@ -287,20 +293,14 @@ final class PackImages {
 
 		Optional<Resource> resource = client.getResourceManager().getResource(location);
 		if (resource.isEmpty()) {
-			notes.add(path + " is not a file any loaded resource pack ships, so " + texture.sampler()
-					+ " reads one black pixel");
-
-			return null;
+			return missing(texture, notes, path + " is not a file any loaded resource pack ships");
 		}
 
 		try (InputStream stream = resource.get().open()) {
 			byte[] bytes = stream.readNBytes(MAX_RESOURCE_BYTES + 1);
 			if (bytes.length > MAX_RESOURCE_BYTES) {
-				notes.add(path + " holds more than the " + MAX_RESOURCE_BYTES
-						+ " bytes a texture is read under, so " + texture.sampler()
-						+ " reads one black pixel");
-
-				return null;
+				return missing(texture, notes, path + " holds more than the " + MAX_RESOURCE_BYTES
+						+ " bytes a texture is read under");
 			}
 
 			NoiseTexture.Image decoded = NoiseTexture.decode(bytes);
@@ -308,10 +308,26 @@ final class PackImages {
 			return new Image(texture, decoded.width(), decoded.height(), decoded.rgba(), GpuFormat.RGBA8_UNORM,
 					decoded.width() + "x" + decoded.height());
 		} catch (IOException | RuntimeException e) {
-			notes.add(path + " could not be read: " + e.getMessage() + ", so " + texture.sampler()
-					+ " reads one black pixel");
+			return missing(texture, notes, path + " could not be read: " + e.getMessage());
+		}
+	}
 
-			return null;
+	/** The game's own missing texture, for a resource it could not hand over. */
+	private static Image missing(PackTexture texture, List<String> notes, String reason) {
+		notes.add(reason + ", so " + texture.sampler() + " reads the game's missing texture");
+
+		try (NativeImage image = MissingTextureAtlasSprite.generateMissingImage()) {
+			int[] texels = image.getPixelsABGR();
+			byte[] rgba = new byte[texels.length * 4];
+			for (int at = 0; at < texels.length; at++) {
+				rgba[at * 4] = (byte) texels[at];
+				rgba[at * 4 + 1] = (byte) (texels[at] >> 8);
+				rgba[at * 4 + 2] = (byte) (texels[at] >> 16);
+				rgba[at * 4 + 3] = (byte) (texels[at] >>> 24);
+			}
+
+			return new Image(texture, image.getWidth(), image.getHeight(), rgba, GpuFormat.RGBA8_UNORM,
+					image.getWidth() + "x" + image.getHeight() + " missing texture");
 		}
 	}
 
