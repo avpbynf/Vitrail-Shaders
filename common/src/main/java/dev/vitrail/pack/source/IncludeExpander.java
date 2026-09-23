@@ -202,7 +202,7 @@ public final class IncludeExpander {
 	}
 
 	/** What this reader read for the pack across every unit expanded so far, ready for the log. */
-	public List<String> looseConditionals() {
+	public List<String> looseDirectives() {
 		return List.copyOf(this.loose);
 	}
 

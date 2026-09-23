@@ -99,7 +99,7 @@ public final class PackLoader {
 			}
 
 			return new LoadedPack(source.packName(), source.isZip(), dimensions, properties, options,
-					programs, resolved, stats, expansion, expanded, expander.looseConditionals(),
+					programs, resolved, stats, expansion, expanded, expander.looseDirectives(),
 					Set.copyOf(disabled), source.caseInsensitiveHits(),
 					(System.nanoTime() - start) / 1_000_000L);
 		}

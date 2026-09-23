@@ -20,6 +20,6 @@ import java.util.Set;
 public record LoadedPack(String packName, boolean fromZip, DimensionSet dimensions,
 		ShaderProperties properties, OptionIndex options, ProgramSet programs,
 		ProgramResolver resolved, PackStats stats, ExpansionStats expansion, int expandedUnits,
-		List<String> looseConditionals, Set<String> disabledPrograms, int caseInsensitiveHits,
+		List<String> looseDirectives, Set<String> disabledPrograms, int caseInsensitiveHits,
 		long loadMillis) {
 }
