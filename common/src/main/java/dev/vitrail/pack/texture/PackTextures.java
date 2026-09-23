@@ -10,6 +10,7 @@ import dev.vitrail.pack.source.ShaderPackSource;
 import dev.vitrail.pack.source.ShaderProperties;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -41,10 +42,16 @@ import java.util.Set;
  * there is no name in it to take.
  * <p>
  * One case is the exception, and it is Iris's rule rather than a softening of that one. A
- * declaration naming a file the pack DOES NOT SHIP is dropped whole, its name with it: Iris never
- * puts such a sampler in the stage's map, so the name goes on meaning what it meant, which for a
- * colour target is that target. A declaration naming a file OUTSIDE the pack keeps its name and
- * reads black, because that path is not a mistake of the author's.
+ * declaration naming a file the pack DOES NOT SHIP, or a picture whose header the game's reader
+ * refuses, is dropped whole, its name with it: Iris never puts such a sampler in the stage's map,
+ * so the name goes on meaning what it meant, which for a colour target is that target. A declaration
+ * naming a file OUTSIDE the pack keeps its name and reads black, because that path is not a mistake
+ * of the author's.
+ * <p>
+ * A picture with a sound header and pixels that do not decode keeps its name and reads black, where
+ * Iris drops it like the others. Telling it apart here would decode every picture at every opening
+ * that reads these directives, most of which upload nothing, where the pixels are only needed at
+ * the upload and are decoded there; what it costs is black on that name where Iris reads the target.
  * <p>
  * A blob SHORTER than the size it announces keeps its name too, and that is a difference with Iris
  * the other way round: Iris throws while reading such a file, nothing catches the throw, and the
@@ -64,6 +71,16 @@ public final class PackTextures {
 	private static final int RAW_2D_TOKENS = 7;
 	private static final int RAW_3D_TOKENS = 8;
 
+	/** The eight bytes a PNG opens with, read as one big endian word. */
+	private static final long PNG_SIGNATURE = 0x89504E470D0A1A0AL;
+
+	/** The length and the type of the chunk a PNG must open on, {@code IHDR}. */
+	private static final int IHDR_LENGTH = 13;
+	private static final int IHDR_TYPE = 0x49484452;
+
+	/** The signature, then the length and the type of the first chunk. */
+	private static final int PNG_HEADER_BYTES = 16;
+
 	private final List<PackTexture> supplied;
 	private final List<Refused> refused;
 	private final List<String> notes;
@@ -81,9 +98,9 @@ public final class PackTextures {
 	 *                which is not a nicety: Complementary points {@code texture.deferred.colortex3}
 	 *                at a cloud and water lookup table, and letting one misspelled word later in
 	 *                that line hand the name back to colour target three would have its deferred
-	 *                read the scene as that table. Empty on the two lines that claim nothing: a key
-	 *                that named no sampler, and a path the pack does not ship, which Iris drops as
-	 *                well
+	 *                read the scene as that table. Empty on the lines that claim nothing: a key
+	 *                that named no sampler, and a path the pack does not ship or a picture whose
+	 *                header the game's reader refuses, both of which Iris drops as well
 	 */
 	public record Refused(String key, String value, String reason, Optional<TextureStage> stage,
 			String sampler) {
@@ -204,8 +221,8 @@ public final class PackTextures {
 		// pack has said which sampler it is taking over, and a word it misspelled in the rest of the
 		// line does not unsay it. Letting one typo hand colortex3 back to colour target three would
 		// have a deferred read the scene as a lookup table, which is the picture nobody questions,
-		// where black is a question. The file itself is the one thing that can, and only by not
-		// being there at all; that case is at the bottom of this method.
+		// where black is a question. The file itself is the one thing that can, by not being there
+		// or by not opening as a PNG; those cases are at the bottom of this method.
 		// One space, the separator Iris gives the texture directives, and not a run of whitespace:
 		// the word count is what tells a PNG from a raw texture there, and an empty word between two
 		// real ones moves the value into a count the format gives no meaning to.
@@ -275,6 +292,19 @@ public final class PackTextures {
 			if (size > wanted) {
 				notes.add(path + " holds " + size + " bytes for a declaration of " + wanted
 						+ ", and the tail is not uploaded");
+			}
+		} else {
+			// A picture Iris cannot decode leaves the stage's map exactly as a missing file does
+			// (ShaderPack.java:341-345 for the read, CustomTextureManager.java:58-64 for the
+			// decode), so the name is handed back on the same terms and every program reads what it
+			// read before, the colour target of that name included. Only the header is read here,
+			// sixteen bytes, because every opening reads these directives and most of them upload
+			// nothing; the pixels are decoded where they are uploaded.
+			Optional<String> unreadable = pngHeader(source, file.get(), size);
+			if (unreadable.isPresent()) {
+				refused.add(Refused.of(key, value, path + " is not a PNG the game reads ("
+						+ unreadable.get() + "), so " + sampler + " reads what it read before"));
+				return;
 			}
 		}
 
@@ -390,6 +420,42 @@ public final class PackTextures {
 				: null;
 	}
 
+	/**
+	 * Why the game's image reader would refuse a picture before decoding a pixel of it, or nothing
+	 * when it goes on to decode. The checks of {@code PngInfo.validateHeader}, in its order, which
+	 * {@code NativeImage.read} runs first and which is the reader Iris hands the bytes to: sixteen
+	 * bytes at least, the PNG signature, then a first chunk thirteen bytes long and typed
+	 * {@code IHDR}. A JPEG fails here where ImageIO would have decoded it. A file that cannot be
+	 * read at all fails too, as it does for Iris.
+	 * <p>
+	 * Nothing past the header is looked at. A picture whose header is sound and whose pixels are
+	 * not fails at the upload instead, and reads black there rather than handing its name back.
+	 */
+	private static Optional<String> pngHeader(ShaderPackSource source, Path file, long size) {
+		if (size < PNG_HEADER_BYTES) {
+			return Optional.of("PNG header missing");
+		}
+
+		ByteBuffer header;
+		try {
+			header = ByteBuffer.wrap(source.head(file, PNG_HEADER_BYTES));
+		} catch (IOException e) {
+			return Optional.of(e.getMessage());
+		}
+
+		if (header.getLong(0) != PNG_SIGNATURE) {
+			return Optional.of("bad PNG signature");
+		}
+
+		if (header.getInt(8) != IHDR_LENGTH) {
+			return Optional.of("bad length for the IHDR chunk");
+		}
+
+		return header.getInt(12) == IHDR_TYPE
+				? Optional.empty()
+				: Optional.of("bad type for the IHDR chunk");
+	}
+
 	/** The {@code .mcmeta} beside the file as one line, or nothing when the pack ships none. */
 	private static String meta(ShaderPackSource source, String path) throws IOException {
 		Optional<Path> meta = source.file(path + ".mcmeta");
@@ -482,8 +548,9 @@ public final class PackTextures {
 	 * <p>
 	 * Empty is two different answers and the caller has to keep them apart: a name
 	 * {@link #suppliedTo} does not carry means nothing was taken from it, whether the pack never
-	 * wrote it or wrote it against a file it does not ship; a name it carries with nothing behind it
-	 * is an override this engine could not honour, which reads black.
+	 * wrote it or wrote it against a file it does not ship or a picture refused at its header; a name
+	 * it carries with nothing behind it is an override this engine could not honour, which reads
+	 * black.
 	 * <p>
 	 * A stage override is asked first. Nothing in the corpus writes both forms for one name, and if
 	 * one ever does, the form that names a stage is the more precise of the two.
@@ -517,8 +584,8 @@ public final class PackTextures {
 	 * this engine cannot serve reads black and is named in the log; letting it fall back to the
 	 * colour target it shares a name with would put the scene where the pack asked for a lookup
 	 * table, and that is a picture nobody would question. {@link #resolve} is what tells the two
-	 * apart. The one line that is not here at all is the one naming a file the pack does not ship,
-	 * which is dropped where it is read, name included, as Iris drops it.
+	 * apart. The lines that are not here at all name a file the pack does not ship or a picture
+	 * refused at its header, which are dropped where they are read, name included, as Iris drops them.
 	 * <p>
 	 * Both spellings because a colour target answers to two names and the override is written under
 	 * one of them: Complementary writes {@code texture.gbuffers.gaux4} and its gbuffers may sample
@@ -559,7 +626,7 @@ public final class PackTextures {
 	 * swapped out of ({@code :485-486}). And a name with nothing behind it at all is not one of
 	 * them: a picture Iris fails to read leaves its stage map without that name
 	 * ({@code pipeline/CustomTextureManager.java:56-67}), so the default sampler goes back to the
-	 * target, which is what a name this engine refused does here.
+	 * target, which is what a picture refused at its header does here.
 	 */
 	public Set<String> picturesTo(TextureStage stage) {
 		Set<String> names = new LinkedHashSet<>();

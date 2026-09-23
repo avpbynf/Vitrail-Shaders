@@ -68,6 +68,19 @@ public final class NoiseTexture {
 	}
 
 	/**
+	 * An image whose header asks for more than this engine allocates for one. A refusal of this
+	 * engine's own and not a file that failed to decode, which is why it has a type of its own.
+	 */
+	public static final class TooLarge extends IOException {
+
+		private static final long serialVersionUID = 1L;
+
+		TooLarge(String message) {
+			super(message);
+		}
+	}
+
+	/**
 	 * Decodes a pack's own noise image, {@code texture.noise}, or any other file it ships.
 	 * Four packs of the corpus ship a noise image, and theirs is nothing like the generated field:
 	 * BSL's is blurred smooth, and water octaves fed the generated white noise instead crumple into
@@ -98,7 +111,7 @@ public final class NoiseTexture {
 				int width = reader.getWidth(0);
 				int height = reader.getHeight(0);
 				if (width > MAX_SIDE || height > MAX_SIDE || (long) width * height > MAX_TEXELS) {
-					throw new IOException("the header says " + width + "x" + height + ", past the "
+					throw new TooLarge("the header says " + width + "x" + height + ", past the "
 							+ MAX_SIDE + " a side and the " + MAX_TEXELS
 							+ " texels an image of a pack is allowed");
 				}

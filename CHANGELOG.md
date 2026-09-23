@@ -53,6 +53,10 @@ what the next one holds.
   compute now reads what the full screen pass beside it reads, and runs. A game texture that no
   loaded resource pack ships now reads the game's missing texture in every pass, as under Iris,
   where it read black.
+- **A pack image that cannot be read no longer turns a buffer black.** When a pack replaced one of
+  its buffers with an image of its own and that image was not a PNG the game could read, every pass
+  reading that buffer read black. The buffer now keeps what it held before, in full screen,
+  compute and world passes alike, as under Iris, and the log names the image.
 
 ## 0.11.0-beta
 

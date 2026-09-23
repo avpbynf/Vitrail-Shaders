@@ -662,12 +662,14 @@ final class PackPass {
 				// layout carries it either way and the draw throws on the first name it misses.
 				//
 				// A pack texture reaches this line only when the pack took the name over and
-				// nothing could be read for it, which does not cover a file the pack simply does
-				// not ship: that case hands the name back and the colour target keeps its ordinary
-				// binding, as it does under Iris. What is left here is a declaration that named
-				// something real and could not be turned into an image, and black is the honest
-				// answer for it: falling back to the colour target of the same name would have the
-				// pass read the scene as whatever the pack meant to sample and look convincing.
+				// nothing could be put behind it, which covers neither a file the pack does not
+				// ship nor a picture refused at its header: both hand the name back and the colour
+				// target keeps its ordinary binding, as it does under Iris. What is left here is a
+				// declaration this engine could not serve, a raw blob it does not lay out, a path
+				// outside the pack, or a picture whose pixels do not decode or are more than this
+				// engine allocates, and black is the honest answer for it: the colour target of
+				// the same name would have the pass read the scene as whatever the pack meant to
+				// sample and look convincing.
 				case UNSERVED, UNBINDABLE, PACK_TEXTURE, CUSTOM_IMAGE -> targets.black();
 			};
 

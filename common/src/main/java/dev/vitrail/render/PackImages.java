@@ -43,15 +43,16 @@ import java.util.Optional;
  * game owns instead of shipping one; it is asked for defensively so that a measurement taken
  * outside a client loses that texture rather than the whole reading.
  * <p>
- * A declaration that cannot be honoured is, with one exception named in {@link PackTextures}, kept
- * and left with nothing behind it rather than dropped. {@link PackTextures#suppliedTo} still
- * carries the name, so the sampler reads one black pixel rather than falling back to the colour
- * target it shares a name with. That fall back is the failure worth a class of its own:
- * Complementary points {@code texture.deferred.colortex3} at a cloud and water lookup table, and
- * letting the name go back to colour target three would have its deferred read the scene as that
- * table, which is a picture nobody would question. A texture of the game that no loaded resource
- * pack ships in a readable form is the other exception: it reads the game's missing texture, as it
- * does under Iris.
+ * A picture of the pack whose header the game's reader refuses never gets here:
+ * {@link PackTextures} drops it where the directive is read, name included, as Iris drops it, so the
+ * name keeps the binding it had. A declaration refused for anything else is kept and left with
+ * nothing behind it, a picture whose pixels fail to decode included.
+ * {@link PackTextures#suppliedTo} still carries the name, so the sampler reads one black pixel
+ * rather than falling back to the colour target it shares a name with: Complementary points
+ * {@code texture.deferred.colortex3} at a cloud and water lookup table, and a line of it this
+ * engine refused handing the name back would have its deferred read the scene as that table. A
+ * texture of the game that no loaded resource pack ships in a readable form reads the game's
+ * missing texture, as it does under Iris.
  */
 final class PackImages {
 
@@ -180,8 +181,9 @@ final class PackImages {
 	}
 
 	/**
-	 * One texture, decoded. Null when it cannot be, with the reason in the notes: a name nothing
-	 * could be read for reads black rather than whatever that name meant before the pack took it over.
+	 * One texture, decoded. Null when it cannot be, with the reason in the notes, and the name then
+	 * reads black. The directive reading only checked a picture's header, so a PNG lands here when
+	 * its pixels do not decode, or when it is larger than this engine allocates for one.
 	 */
 	private static Image decode(PackTexture texture, VolumeAtlas atlas, ShaderPackSource source,
 			List<String> notes) {
@@ -224,8 +226,6 @@ final class PackImages {
 						image.width() + "x" + image.height());
 			}
 
-			byte[] bytes = source.bytes(file.get());
-
 			// Any other blob means what its own format says it means, and nothing here turns one of
 			// those into an image: a shape that is neither a volume nor a plain texture, or either
 			// of those in a channel type or order nothing lays out. A one dimensional blob and a
@@ -241,10 +241,15 @@ final class PackImages {
 				return null;
 			}
 
-			NoiseTexture.Image decoded = NoiseTexture.decode(bytes);
+			NoiseTexture.Image decoded = NoiseTexture.decode(source.bytes(file.get()));
 
 			return new Image(texture, decoded.width(), decoded.height(), decoded.rgba(), GpuFormat.RGBA8_UNORM,
 					decoded.width() + "x" + decoded.height());
+		} catch (NoiseTexture.TooLarge e) {
+			notes.add(texture.path() + " is refused, " + e.getMessage() + ", so " + texture.sampler()
+					+ " reads one black pixel");
+
+			return null;
 		} catch (IOException | RuntimeException e) {
 			notes.add(texture.path() + " could not be read: " + e.getMessage() + ", so "
 					+ texture.sampler() + " reads one black pixel");

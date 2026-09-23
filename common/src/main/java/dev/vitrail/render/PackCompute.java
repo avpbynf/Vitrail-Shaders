@@ -1223,19 +1223,12 @@ final class PackCompute implements AutoCloseable {
 					continue;
 				}
 
-				// A name the pack took over for a texture nothing could be read behind. The pass
-				// beside this compute reads one black texel for it (PackPass.java:671), so the compute
+				// A name the pack took over for a texture nothing could be put behind. The pass
+				// beside this compute reads one black texel for it (PackPass.java:672), so the compute
 				// reads the same rather than the colour target of that name or a throw that takes it
-				// out of the frame. A resource no loaded resource pack ships no longer lands here: it
-				// reads the game's missing texture, as under Iris (PackImages.gameResource).
-				//
-				// What still does is a gap and not a workaround. Iris drops a file it cannot read back
-				// to what the name meant before (ShaderPack.java:341-345 and
-				// CustomTextureManager.java:58-64), which for a colour target is that target. Nothing
-				// in this API prevents the same: the name stays claimed for every stage at
-				// PackTextures.java:202-208, and a compute answering apart from its pass would read
-				// one name as two images. What it costs: such a compute reads nought where Iris reads
-				// the scene.
+				// out of the frame. A file the pack does not ship and a picture refused at its header
+				// never land here: PackTextures hands their name back, as Iris does, and the colour
+				// target lookup below answers it like any other.
 				SamplerPlan.Binding taken = this.compute.loaded().samplers().binding(entry.name());
 				if (bound == null && taken.kind() == SamplerPlan.Kind.PACK_TEXTURE && !taken.defaulted()
 						&& targets.black() instanceof VulkanGpuTextureView blank) {

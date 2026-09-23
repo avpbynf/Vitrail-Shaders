@@ -142,10 +142,19 @@ constructor; refusing the one declaration is narrower and keeps the rest of the 
 
 A declaration whose file the pack does not ship no longer claims the name at all: the target that
 name would otherwise have carried keeps its ordinary binding, which is what Iris does by leaving the
-sampler out of the stage's map. A file that is there and cannot be read keeps the name and reads one
-black pixel, and so does a path that points outside the pack. Claiming the name and binding black
-was this engine's own answer and it was worse than either: the pack lost a colour target it had
-said nothing wrong about.
+sampler out of the stage's map. A picture that is there and that the game's image reader refuses at
+its header (the PNG signature, then a first chunk that is a thirteen byte `IHDR`) is dropped the
+same way, since Iris leaves it out of the map on the same terms, so every pass reading that name,
+compute and geometry included, reads the target. A path that points outside the pack keeps the name
+and reads one black pixel. Claiming the name and binding black for the first two was this engine's
+own answer, and it cost the pack a colour target it had said nothing wrong about.
+
+Every opening that reads the directives reads those sixteen header bytes of each picture and nothing
+more; the pixels are decoded only where the images are uploaded. So a picture with a sound header
+and pixels that do not decode keeps its name and reads black, where Iris drops it and reads the
+target: telling it apart earlier would decode every picture at every opening, most of which upload
+nothing. A picture larger than this engine allocates for one reads black as well, and the log says
+it is past that ceiling rather than unreadable.
 
 ## A refusal must still consume the name it claimed
 
@@ -153,7 +162,8 @@ The rule here that looks like a nicety and is the opposite of one.
 
 **The key claims the name; the rest of the line only decides whether anything can be put behind it.**
 Once a directive has named a sampler, no word further along that line unsays it: not a misspelled
-pixel format, not a word count the format gives no meaning to, not a file that is not there.
+pixel format, not a word count the format gives no meaning to. Only the file can, by not being there
+or not opening as a PNG, as the section above says.
 
 The reason is the collision described above. Hand the name back on a refusal and it falls through to
 the colour target sharing that name: the pass reads the scene where the pack asked for its own
