@@ -57,6 +57,12 @@ what the next one holds.
   its buffers with an image of its own and that image was not a PNG the game could read, every pass
   reading that buffer read black. The buffer now keeps what it held before, in full screen,
   compute and world passes alike, as under Iris, and the log names the image.
+- **Shadows no longer sway with the view bobbing after the player is hurt.** Being hit while
+  walking tilts the camera in a way the engine took for a matrix that was not the world's, and from
+  then on, for the rest of the session, it handed packs the walk bob inside the projection rather
+  than beside the camera. BSL and Bliss rebuild positions on screen assuming the projection has no
+  bob in it, so their shadows, and anything else placed that way, slid with every step. The bob now
+  stays where packs expect it, as on Iris, whatever tilts the camera.
 
 ## 0.11.0-beta
 

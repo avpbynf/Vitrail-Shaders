@@ -41,14 +41,17 @@ public final class CapturedProjection {
 	 * whole game and it is the one that draws the world, but a matrix that is not a perspective
 	 * has no business being published as {@code gbufferProjection}.
 	 * <p>
-	 * What it tests matters. The obvious reading of a perspective is {@code m23 == -1}, and it is
-	 * the one term of the w row that the four effects destroy: every one of them is a right hand
-	 * multiplication by a rigid transform B, and that turns {@code m23} into {@code -B.m22}, which
-	 * is the cosine of the bob's own angle. Testing it would reject the capture in precisely the
-	 * four cases this class exists for and accept it only when the capture and the fallback are
-	 * the same matrix. {@code m33} is the term that survives: it comes out as minus the z
-	 * translation of B, and none of the four translates in z, so it stays at zero through all of
-	 * them and is one on the orthographic and quad matrices this is meant to keep out.
+	 * What it tests matters. The four effects are a right hand multiplication by a transform B, which
+	 * turns the w row of a perspective, {@code (0, 0, -1, 0)}, into minus the z row of B. No single
+	 * term of that row survives them. {@code m23} becomes the cosine of the bob's own angle, and
+	 * {@code m33} becomes minus the z translation of B, which is NOT zero: the damage tilt turns
+	 * about an axis leaning by the direction of the hit and stands to the left of the walk bob's
+	 * translation, so a player hit while walking carries some of that translation in z. Refusing the
+	 * capture there left the bob check comparing against the camera's own matrix, which fails, and
+	 * the split was dropped for the session. What survives all four is the length of the w row's
+	 * first three terms: a row of a rotation, one, or more under the nausea's stretch, against
+	 * nought on the orthographic and quad matrices this is meant to keep out. The reversed depth of
+	 * this backend only rewrites the z row, so it does not enter.
 	 */
 	public static void capture(Matrix4fc rendered) {
 		// The hand binds a perspective of its own, through the same overload, and it is not the
@@ -56,7 +59,7 @@ public final class CapturedProjection {
 		// below, so the test cannot be what keeps it out. Taken as the frame's, it would be published
 		// as gbufferProjection to everything drawn after it, and every composite would rebuild the
 		// world through a volume nothing was drawn in.
-		if (HandDraw.drawing() || rendered.m00() == 0.0F || rendered.m33() != 0.0F) {
+		if (HandDraw.drawing() || rendered.m00() == 0.0F || !perspective(rendered)) {
 			return;
 		}
 
@@ -84,6 +87,11 @@ public final class CapturedProjection {
 		}
 
 		return fallback;
+	}
+
+	private static boolean perspective(Matrix4fc matrix) {
+		return matrix.m03() * matrix.m03() + matrix.m13() * matrix.m13()
+				+ matrix.m23() * matrix.m23() > 0.25F;
 	}
 
 	/** Forgets the capture, so that a frame nothing captured falls back rather than repeating. */
