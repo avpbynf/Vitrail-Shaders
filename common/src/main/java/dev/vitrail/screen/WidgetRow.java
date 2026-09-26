@@ -1,5 +1,6 @@
 package dev.vitrail.screen;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.ComponentPath;
 import net.minecraft.client.gui.Font;
@@ -11,7 +12,6 @@ import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 import org.jspecify.annotations.Nullable;
-import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -209,7 +209,7 @@ public final class WidgetRow {
 				return false;
 			}
 
-			return event.button() == GLFW.GLFW_MOUSE_BUTTON_1
+			return event.button() == InputConstants.MOUSE_BUTTON_LEFT
 					? press()
 					: super.mouseClicked(event, doubleClick);
 		}

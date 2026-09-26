@@ -33,7 +33,11 @@ public final class PatchedMethods {
 					+ "Lcom/mojang/blaze3d/buffers/GpuBufferSlice;"
 					+ "Lorg/joml/Matrix4fc;)V";
 
-	/** {@code WeatherEffectRenderer.render}, as the bare game declares it. */
+	/**
+	 * {@code WeatherEffectRenderer.render}, as the bare game declares it. Named by the 26.2 weather
+	 * mixin alone: on 26.3 the method takes the level's pass, NeoForge widens it no longer, and the
+	 * twin of that mixin names its one descriptor itself.
+	 */
 	public static final String WEATHER_RENDER =
 			"render(Lnet/minecraft/world/phys/Vec3;"
 					+ "Lnet/minecraft/client/renderer/state/level/WeatherRenderState;)V";

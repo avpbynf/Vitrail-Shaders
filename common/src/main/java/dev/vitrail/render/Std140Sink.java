@@ -16,7 +16,7 @@ import org.joml.Matrix4fc;
  * {@code Std140Counter}, which writes nothing and therefore has no builder to defer to.
  * <p>
  * The builder has no {@code putMat3}, and neither has its size calculator, so a mat3 is composed
- * from three vec3 puts. That is not a workaround, it is what a mat3 is in std140: three columns
+ * from three column puts. That is not a workaround, it is what a mat3 is in std140: three columns
  * each padded out to sixteen bytes.
  */
 final class Std140Sink implements UniformSink {
@@ -56,13 +56,11 @@ final class Std140Sink implements UniformSink {
 	}
 
 	/**
-	 * Aligned on sixteen and consuming TWELVE, which is not what {@code Std140Builder.putVec3}
-	 * does: that one skips a fourth float on the way out, so a member written after it lands four
-	 * bytes past where the shader reads it. Verified on the compiler: {@code vec3 a; float b;} puts
-	 * b at twelve.
-	 * <p>
-	 * The builder's own padded form is the right one for a matrix column and for an array element,
-	 * where the stride really is sixteen, and {@link #putMat3} still uses it.
+	 * Aligned on sixteen and consuming TWELVE, which is what the shader reads and not what
+	 * {@code Std140Builder.putVec3} does on every game: on 26.2 that one skips a fourth float on the
+	 * way out, so a member written after it lands four bytes past where the shader reads it, and on
+	 * 26.3 it no longer does. Written out here, the member after it lands in the same place on both.
+	 * Verified on the compiler: {@code vec3 a; float b;} puts b at twelve.
 	 */
 	@Override
 	public UniformSink putVec3(float x, float y, float z) {
@@ -103,16 +101,23 @@ final class Std140Sink implements UniformSink {
 	}
 
 	/**
-	 * The builder's PADDED vec3 on purpose, and the one place it is right: a matrix is laid out as
-	 * an array of its columns, and an array element's stride is sixteen whatever the element is. So
-	 * the three columns sit at nought, sixteen and thirty two, and the matrix consumes forty eight,
-	 * which is what the compiler reports as its MatrixStride and the offset of the member after it.
+	 * Each column a vec4 with nought in its fourth float, because a matrix is laid out as an array
+	 * of its columns and an array element's stride is sixteen whatever the element is. So the three
+	 * columns sit at nought, sixteen and thirty two, and the matrix consumes forty eight, which is
+	 * what the compiler reports as its MatrixStride and the offset of the member after it.
+	 * <p>
+	 * <strong>Not the builder's vec3, which is what this used to be, and 26.3 is why.</strong> That
+	 * vec3 padded itself to sixteen on 26.2 and stops at twelve on 26.3, so the last column left
+	 * the matrix four bytes short there and every member after it read four bytes early until an
+	 * alignment happened to catch up. Where one did not, the damage reached whatever came next:
+	 * Complementary's {@code dh_terrain} read its {@code gbufferModelView} a column off, and the far
+	 * terrain's land was placed at the camera and clipped away whole. A vec4 is sixteen on both.
 	 */
 	@Override
 	public UniformSink putMat3(Matrix3fc m) {
-		this.builder.putVec3(m.m00(), m.m01(), m.m02())
-				.putVec3(m.m10(), m.m11(), m.m12())
-				.putVec3(m.m20(), m.m21(), m.m22());
+		this.builder.putVec4(m.m00(), m.m01(), m.m02(), 0.0F)
+				.putVec4(m.m10(), m.m11(), m.m12(), 0.0F)
+				.putVec4(m.m20(), m.m21(), m.m22(), 0.0F);
 
 		return this;
 	}

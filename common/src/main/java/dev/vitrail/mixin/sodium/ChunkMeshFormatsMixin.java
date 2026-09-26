@@ -17,7 +17,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * builder for the stride it writes at, the region for the size of its geometry arena, and the
  * renderer for the layout it binds. Iris does the same thing with two {@code ModifyArg}s on the two
  * calls, which only works while there are two. Sodium 0.9.2 added a fourth site that does not ask
- * here at all, {@link ArenaAggregatorMixin}, and that is a separate hole.
+ * here at all on 26.2, {@code ArenaAggregatorMixin}, and that is a separate hole; the Sodium
+ * built for 26.3 asks here itself.
  * <p>
  * <strong>The answer may change while the game runs, and this is not where it changes.</strong> Two
  * of the three readers are the section manager's constructor and the third is a region's device

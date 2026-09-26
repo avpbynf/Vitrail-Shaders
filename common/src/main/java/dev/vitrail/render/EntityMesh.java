@@ -2,7 +2,6 @@ package dev.vitrail.render;
 
 import dev.vitrail.glsl.EntityVertex;
 import dev.vitrail.glsl.MovingBlockVertex;
-import dev.vitrail.mixin.access.GpuDeviceAccessor;
 import dev.vitrail.Vitrail;
 
 import com.mojang.blaze3d.GpuDeviceLossException;
@@ -329,11 +328,11 @@ public final class EntityMesh {
 		// plausible-and-wrong.
 		if (moved) {
 			GpuDevice device = RenderSystem.getDevice();
-			if (((GpuDeviceAccessor) device).vitrail$backend() instanceof StalePipelines stale) {
-				List<RenderPipeline> dropped = stale.vitrail$dropEntityPipelines();
+			List<RenderPipeline> dropped = GraphicsApi.dropEntityPipelines(device);
+			if (dropped != null) {
 				try {
 					for (RenderPipeline pipeline : dropped) {
-						device.precompilePipeline(pipeline, null);
+						GraphicsApi.compile(device, pipeline, null);
 					}
 				} catch (GpuDeviceLossException e) {
 					throw e;
@@ -355,7 +354,7 @@ public final class EntityMesh {
 					// asking, so the entity switch is the one question left and it finds agreement.
 					widerRefused = true;
 					carrying = false;
-					stale.vitrail$dropEntityPipelines();
+					GraphicsApi.dropEntityPipelines(device);
 					HandDraw.stopped();
 					EntityDraw.wanted(false);
 					Vitrail.logger().error("An entity pipeline of the game did not compile at the "

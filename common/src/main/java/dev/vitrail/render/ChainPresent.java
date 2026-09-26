@@ -7,7 +7,6 @@ import dev.vitrail.Vitrail;
 import com.mojang.blaze3d.GpuFormat;
 import com.mojang.blaze3d.PrimitiveTopology;
 import com.mojang.blaze3d.buffers.GpuBuffer;
-import com.mojang.blaze3d.pipeline.BindGroupLayout;
 import com.mojang.blaze3d.pipeline.ColorTargetState;
 import com.mojang.blaze3d.pipeline.CompiledRenderPipeline;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
@@ -106,22 +105,20 @@ final class ChainPresent {
 
 	ChainPresent(ChainPlan.Attachment from) {
 		this.from = from;
-		this.source = (id, type) -> {
+		this.source = GraphicsApi.source((id, type) -> {
 			if (type == ShaderType.FRAGMENT) {
 				return FRAGMENT_ID.equals(id) ? FRAGMENT : null;
 			}
 
 			return VERTEX_ID.equals(id) ? VERTEX : null;
-		};
+		});
 
 		this.pipeline = RenderPipeline.builder()
 				.withLocation(Identifier.fromNamespaceAndPath(Vitrail.MOD_ID, "pipeline/chain_present"))
 				.withVertexShader(VERTEX_ID)
 				.withFragmentShader(FRAGMENT_ID)
 				.withBindGroupLayout(BindGroupLayouts.GLOBALS)
-				.withBindGroupLayout(BindGroupLayout.builder()
-						.withSampler(SAMPLER)
-						.build())
+				.withBindGroupLayout(GraphicsApi.samplers(SAMPLER))
 				.withVertexBinding(0, DefaultVertexFormat.POSITION_TEX)
 				.withColorTargetState(new ColorTargetState(Optional.empty(), SCREEN_FORMAT,
 						ColorTargetState.WRITE_COLOR))
@@ -139,12 +136,12 @@ final class ChainPresent {
 	 * load in its name, so no purge ever carries it over: it comes back new every time.
 	 */
 	CompiledRenderPipeline compiled(GpuDevice device) {
-		return device.precompilePipeline(this.pipeline, this.source);
+		return GraphicsApi.compile(device, this.pipeline, this.source);
 	}
 
 	/** Called every frame: a resource reload empties the pipeline cache. */
 	boolean prepare(GpuDevice device) {
-		if (compiled(device).isValid()) {
+		if (GraphicsApi.valid(compiled(device))) {
 			return true;
 		}
 
@@ -174,12 +171,12 @@ final class ChainPresent {
 		}
 
 		try (RenderPass pass = encoder.createRenderPass(() -> LABEL, into, Optional.empty())) {
-			pass.setPipeline(this.pipeline);
+			GraphicsApi.setPipeline(pass, this.pipeline);
 			RenderSystem.bindDefaultUniforms(pass);
 			pass.setVertexBuffer(0, quad.slice());
 			// NEAREST, the target being the size of the screen: one texel is one pixel and the
 			// value wanted is the one the chain wrote, not a blend of it with its neighbour.
-			pass.bindTexture(SAMPLER, view,
+			GraphicsApi.bindTexture(pass, SAMPLER, view,
 					RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST));
 			pass.draw(VERTICES, 1, 0, 0);
 		}

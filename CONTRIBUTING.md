@@ -336,8 +336,9 @@ redistributable, is in [developing](docs/developing.md).
 gradlew.bat build
 ```
 
-The JDK it wants is pinned in `gradle.properties`, along with the Minecraft and loader versions.
-The first build decompiles Minecraft and takes a couple of minutes. After that it is a few seconds.
+The JDK it wants is pinned in `gradle.properties`, along with the loader versions that do not
+follow the game. The first build decompiles Minecraft and takes a couple of minutes. After that it is
+a few seconds.
 
 Three jars land in `build/libs`, named for the version in `gradle.properties` and the Minecraft
 version beside it. The first is the one a release ships and runs on either loader; the other two are
@@ -357,6 +358,39 @@ To run the mod in a development client instead of installing it:
 gradlew.bat :neoforge:runClient
 ```
 
+### One tree, two games
+
+The tree builds a jar for Minecraft 26.2 and one for 26.3, one game per invocation. `minecraft` in
+`gradle.properties` names the default and `-Pminecraft=` picks the other:
+
+```
+gradlew.bat build
+gradlew.bat build -Pminecraft=26.3
+```
+
+Everything that follows the game, from NeoForm and NeoForge to Sodium and the two Fabric API
+modules, is in `versions/<version>.properties`. Each game builds into `build/mc<version>/` of every
+module, so switching does not recompile from nothing, and both merged jars land in `build/libs`
+side by side. A change is green when both builds are, which is what the build workflow runs.
+
+Where the two games differ, the difference is a whole file and never a branch inside one:
+
+- `src/main/` is shared, written against the 26.2 names. 26.3 moved most of the render API from
+  `com.mojang.blaze3d` to `com.mojang.renderpearl` under the same simple names, and a 26.3 build
+  compiles the shared sources rewritten through `versions/26.3.remap`, a copy under `build/` whose
+  line numbers are the original's. A class the shared tree names that moved is added to that file,
+  not written twice.
+- `src/mc<version>/` holds what one game compiles, added to the source set beside `src/main/` and
+  never laid over it. A class that differs exists once per game under the same name and the same
+  surface, `render/GraphicsApi` and `render/GameRender` being the two seams most calls go through;
+  a class only one game has lives only there.
+- A mixin that differs keeps its name and sits once per game under `src/mc<version>/`. Most stay
+  listed in the shared config; the hand and the sky, which travel with mixins of one game only, are
+  in `dev.vitrail.mixin.game` with them. A mixin only one game has goes in that package and in that
+  game's `vitrail-game.mixins.json`, which both loaders list. The compiler checks none of a mixin's
+  targets, so a mixin changed for one game is checked against that game's jar, its handler
+  signature included.
+
 ## What the build refuses
 
 `gradlew build` is also the check, and it fails on warnings rather than printing them. What it
@@ -371,6 +405,10 @@ holds:
   join them, `StringSplitter` and `OperatorPrecedence`
 - `checkText`, which covers the two things no compiler sees: a byte order mark, which PowerShell
   writes unless told not to, and typographic punctuation
+- the unit tests under `common/src/test/`, which need neither a game running nor a pack. One of
+  them holds the game's transforms block, which a pack's entity programs are declared against, to
+  the include the game being built ships, since a block declared in another order compiles and
+  reads the wrong bytes
 
 `gradlew build -PlintReport` prints the remaining Error Prone warnings and every compiler warning
 with them, since it drops `-Werror`. A run under it is a listing rather than a check, and the build

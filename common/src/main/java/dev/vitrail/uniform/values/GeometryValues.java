@@ -156,7 +156,7 @@ public final class GeometryValues {
 		// because only a family drawn over the world has a glint: it is a name no full screen pass can
 		// reach. What multiplies it in Iris is the draw's colour modulator, which is white for every
 		// draw the game prepares from a render type, so the product is this number
-		// (VanillaTransformer.java:134, against LegacyGlsl.GAME_TRANSFORMS_BLOCK).
+		// (VanillaTransformer.java:134, against GameTransforms.BLOCK).
 		builder.add(LegacyGlsl.GLINT_ALPHA, UniformShape.FLOAT,
 				(world, out) -> out.set(world.glintAlpha()));
 

@@ -67,7 +67,8 @@ By family, so you can tell whether a change is in scope:
 
 Two of those need no corpus: the uniform block invariants and path confinement. Everything else
 wants one. None of them run on a bare clone even so, since the harness that drives them is the one
-absent above, and what `check` adds to a compile is the text rule and nothing else.
+absent above, and what `check` adds to a compile is the text rule and the unit tests that need no
+pack, one of which holds the game's transforms block to the include the game ships.
 
 ## What makes a measurement trustworthy
 
@@ -314,6 +315,22 @@ property is absent. A reading is only as good as the run around it: compare runs
 state, and remember that the game lowers its own frame rate after a while without input (the
 inactivity limit in the video settings), which moves every per-second number and none of the
 per-pass milliseconds.
+
+**The Khronos validation layer reads the whole frame on request.** The game's own
+`--vulkanValidation` argument turns it on wherever the layer is installed, and `glDebugVerbosity:2`
+in `options.txt` adds its warnings to its errors in the log. On a Mac, where the game loads the
+MoltenVK LWJGL bundles rather than a Vulkan loader, the loader, the layer and MoltenVK come from
+Homebrew (`vulkan-loader`, `vulkan-validationlayers`, `molten-vk`), and three more things point the
+game at them: `-Dorg.lwjgl.vulkan.libname=/opt/homebrew/lib/libvulkan.1.dylib` among the JVM
+arguments, `VK_DRIVER_FILES` naming MoltenVK's ICD file in the environment, and `VK_ADD_LAYER_PATH`
+naming a folder whose copy of the layer's manifest carries an absolute library path, since the one
+Homebrew installs names a bare file the loader cannot open from inside the game.
+`VK_KHRONOS_VALIDATION_DUPLICATE_MESSAGE_LIMIT` raises the ten messages a rule is allowed, which
+is what tells a rule broken once at load from one broken every frame. **Read the first refusal and
+not the ones after it:** the layer does not hand a call it refuses on to the driver, so every
+complaint about stale descriptors, and even a crash inside the driver, can be the layer's own
+doing downstream of one refused call. The same scene under both games is what separates a port's
+fault from one the older game shares.
 
 ## Rules that were paid for
 

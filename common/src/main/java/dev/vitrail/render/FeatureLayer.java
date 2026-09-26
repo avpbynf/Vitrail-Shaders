@@ -8,7 +8,6 @@ import com.mojang.blaze3d.GpuDeviceLossException;
 import com.mojang.blaze3d.GpuFormat;
 import com.mojang.blaze3d.PrimitiveTopology;
 import com.mojang.blaze3d.buffers.GpuBuffer;
-import com.mojang.blaze3d.pipeline.BindGroupLayout;
 import com.mojang.blaze3d.pipeline.BlendFunction;
 import com.mojang.blaze3d.pipeline.ColorTargetState;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
@@ -41,6 +40,12 @@ import java.util.Optional;
  * game uses for its always-on-top features, and composes the result onto the half of the pack's
  * target the world's translucents are about to blend onto, in the order vanilla draws: features
  * first, then water.
+ * <p>
+ * <strong>The override is 26.2's, and {@link GameRender} is where it is posed.</strong> Minecraft
+ * 26.3 removed it along with the pass each draw used to open for itself, and draws the translucent
+ * features inside the one pass it keeps open for its whole main pass. There
+ * {@link GameRender#redirectsFeatures()} answers no, says why once in the log, and this layer is
+ * never opened: what it catches on 26.2 stays on the game's target on 26.3.
  * <p>
  * <strong>This is a stopgap and it is measured as one.</strong> It is the seed's compromise applied
  * to a handful more pixels: the features arrive tone mapped, after the deferreds, so they are
@@ -183,13 +188,13 @@ final class FeatureLayer {
 	 */
 	FeatureLayer(ChainPlan.Attachment into, GpuFormat destination) {
 		this.into = into;
-		this.source = (id, type) -> {
+		this.source = GraphicsApi.source((id, type) -> {
 			if (type == ShaderType.FRAGMENT) {
 				return FRAGMENT_ID.equals(id) ? FRAGMENT : null;
 			}
 
 			return VERTEX_ID.equals(id) ? VERTEX : null;
-		};
+		});
 
 		this.pipeline = RenderPipeline.builder()
 				.withLocation(Identifier.fromNamespaceAndPath(Vitrail.MOD_ID,
@@ -197,7 +202,7 @@ final class FeatureLayer {
 				.withVertexShader(VERTEX_ID)
 				.withFragmentShader(FRAGMENT_ID)
 				.withBindGroupLayout(BindGroupLayouts.GLOBALS)
-				.withBindGroupLayout(BindGroupLayout.builder().withSampler(SAMPLER).build())
+				.withBindGroupLayout(GraphicsApi.samplers(SAMPLER))
 				.withVertexBinding(0, DefaultVertexFormat.POSITION_TEX)
 				.withColorTargetState(new ColorTargetState(
 						Optional.of(BlendFunction.TRANSLUCENT_PREMULTIPLIED_ALPHA), destination,
@@ -241,7 +246,7 @@ final class FeatureLayer {
 			try {
 				// No depth of its own: the redirected draws test against the game's depth, which
 				// the override for depth keeps pointing at, so entities still hide behind walls.
-				this.layer = new TextureTarget("Vitrail features", width, height, false, FORMAT);
+				this.layer = GraphicsApi.textureTarget("Vitrail features", width, height, false, FORMAT);
 			} catch (GpuDeviceLossException e) {
 				throw e;
 			} catch (RuntimeException e) {
@@ -263,7 +268,7 @@ final class FeatureLayer {
 
 	/** Called every frame: a resource reload empties the pipeline cache. */
 	boolean prepare(GpuDevice device) {
-		if (device.precompilePipeline(this.pipeline, this.source).isValid()) {
+		if (GraphicsApi.valid(GraphicsApi.compile(device, this.pipeline, this.source))) {
 			return true;
 		}
 
@@ -298,10 +303,10 @@ final class FeatureLayer {
 		}
 
 		try (RenderPass pass = encoder.createRenderPass(() -> LABEL, into, clear)) {
-			pass.setPipeline(this.pipeline);
+			GraphicsApi.setPipeline(pass, this.pipeline);
 			RenderSystem.bindDefaultUniforms(pass);
 			pass.setVertexBuffer(0, quad.slice());
-			pass.bindTexture(SAMPLER, this.layer.getColorTextureView(),
+			GraphicsApi.bindTexture(pass, SAMPLER, this.layer.getColorTextureView(),
 					RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST));
 			pass.draw(VERTICES, 1, 0, 0);
 		}

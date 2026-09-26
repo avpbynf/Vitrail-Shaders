@@ -5,11 +5,7 @@ import dev.vitrail.render.BlockEntityOrigin;
 import dev.vitrail.render.EntityIdentifiers;
 import dev.vitrail.render.SubmittedIdentifiers;
 
-import com.mojang.blaze3d.vertex.PoseStack;
-import net.minecraft.client.model.Model;
 import net.minecraft.client.renderer.feature.ModelFeatureRenderer;
-import net.minecraft.client.renderer.rendertype.RenderType;
-import net.minecraft.client.renderer.texture.TextureAtlasSprite;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
@@ -39,9 +35,7 @@ public abstract class ModelSubmitMixin implements BlockEntityOrigin, SubmittedId
 	private long vitrail$identifiers;
 
 	@Inject(method = "<init>", at = @At("RETURN"), require = 1)
-	private void vitrail$capture(RenderType renderType, PoseStack.Pose pose, Model<?> model,
-			Object state, int lightCoords, int overlayCoords, int tintedColor,
-			TextureAtlasSprite sprite, PoseStack.Pose sheetedDecalPose, CallbackInfo callback) {
+	private void vitrail$capture(CallbackInfo callback) {
 		this.vitrail$blockEntity = BlockEntityGeometry.submitting();
 		this.vitrail$identifiers = EntityIdentifiers.packed();
 	}

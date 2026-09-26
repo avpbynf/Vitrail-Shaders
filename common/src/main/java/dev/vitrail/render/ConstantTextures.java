@@ -53,11 +53,11 @@ final class ConstantTextures {
 	 * holds no pass open, see {@link #ready}.
 	 */
 	private ConstantTextures(GpuDevice device) {
-		this.black = new TextureTarget("Vitrail terrain black", 1, 1, false, FORMAT);
-		this.white = new TextureTarget("Vitrail terrain white", 1, 1, false, FORMAT);
-		this.farPlane = new TextureTarget("Vitrail far plane", 1, 1, true, FORMAT);
+		this.black = GraphicsApi.textureTarget("Vitrail terrain black", 1, 1, false, FORMAT);
+		this.white = GraphicsApi.textureTarget("Vitrail terrain white", 1, 1, false, FORMAT);
+		this.farPlane = GraphicsApi.textureTarget("Vitrail far plane", 1, 1, true, FORMAT);
 		for (PbrMap map : PbrMap.values()) {
-			this.flatMaps.put(map, new TextureTarget("Vitrail terrain " + map.sampler(), 1, 1,
+			this.flatMaps.put(map, GraphicsApi.textureTarget("Vitrail terrain " + map.sampler(), 1, 1,
 					false, FORMAT));
 		}
 

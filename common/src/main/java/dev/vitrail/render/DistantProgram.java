@@ -14,8 +14,6 @@ import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.platform.CompareOp;
 import com.mojang.blaze3d.systems.GpuDevice;
 import com.mojang.blaze3d.vertex.VertexFormat;
-import com.mojang.blaze3d.vulkan.VulkanDevice;
-import com.mojang.blaze3d.vulkan.glsl.GlslCompiler;
 
 import org.joml.Matrix4fc;
 
@@ -200,7 +198,7 @@ final class DistantProgram extends FamilyProgram {
 	}
 
 	@Override
-	public boolean warmAhead(VulkanDevice device, GlslCompiler compiler) {
+	public boolean warmAhead(AheadCompiler compiler) {
 		// Without DH standing, nothing ever draws these. And measured on a bench without that
 		// mod, the two dh programs also refused shaderc outright, so compiling ahead here bought
 		// nothing but refusal lines for programs no frame would ever ask for.
@@ -208,7 +206,7 @@ final class DistantProgram extends FamilyProgram {
 			return false;
 		}
 
-		return super.warmAhead(device, compiler);
+		return super.warmAhead(compiler);
 	}
 
 }

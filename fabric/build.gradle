@@ -50,6 +50,7 @@ tasks.named("processResources", ProcessResources).configure {
 		mod_id: project.mod_id,
 		mod_version: rootProject.effectiveVersion,
 		minecraft_version: project.minecraft_version,
+		minecraft_next: project.minecraft_next,
 		fabric_loader_min_version: project.fabric_loader_min_version
 	]
 

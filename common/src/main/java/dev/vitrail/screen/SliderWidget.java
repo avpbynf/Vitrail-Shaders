@@ -2,6 +2,7 @@ package dev.vitrail.screen;
 
 import dev.vitrail.pack.menu.MenuOption;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -11,7 +12,6 @@ import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.Mth;
-import org.lwjgl.glfw.GLFW;
 
 /**
  * The same setting, walked through by dragging, for the names a pack lists in {@code sliders=}. This
@@ -142,7 +142,7 @@ public final class SliderWidget extends ValueWidget {
 
 	@Override
 	public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
-		if (event.button() != GLFW.GLFW_MOUSE_BUTTON_1) {
+		if (event.button() != InputConstants.MOUSE_BUTTON_LEFT) {
 			// Deliberately not the cell's own answer: a right click walks a value backwards, and there
 			// is nothing to walk backwards on a track.
 			return false;
@@ -208,7 +208,7 @@ public final class SliderWidget extends ValueWidget {
 
 	@Override
 	public boolean mouseReleased(MouseButtonEvent event) {
-		if (event.button() != GLFW.GLFW_MOUSE_BUTTON_1) {
+		if (event.button() != InputConstants.MOUSE_BUTTON_LEFT) {
 			return super.mouseReleased(event);
 		}
 

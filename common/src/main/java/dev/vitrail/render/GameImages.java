@@ -5,6 +5,7 @@ import dev.vitrail.mixin.access.TextureManagerAccessor;
 import com.mojang.blaze3d.textures.GpuTextureView;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.texture.AbstractTexture;
+import net.minecraft.client.renderer.texture.MissingTextureAtlasSprite;
 import net.minecraft.client.renderer.texture.TextureManager;
 import net.minecraft.resources.Identifier;
 
@@ -12,7 +13,7 @@ import java.util.Map;
 
 /**
  * Names the image a draw really binds, by asking the game which of its own textures that view
- * belongs to.
+ * belongs to, and hands out the one the game holds under a name, for a pack that binds it live.
  * <p>
  * <strong>This exists because reading the wiring is not the same as reading the picture.</strong>
  * The road from a render type to a sampler is four handovers long - the type names an identifier,
@@ -56,6 +57,37 @@ final class GameImages {
 		// Every image of the pack's own is one of these, the colour targets first of all, so this is
 		// the ordinary answer for a sampler the chain fills rather than a fault.
 		return "an image the game does not hold, " + size;
+	}
+
+	/**
+	 * The view of the texture the game holds under that name, or of its missing texture where it
+	 * holds none, for a pack texture bound live ({@code PackImages.Image.live}); null only where
+	 * there is no client or the name is none.
+	 * <p>
+	 * Asked at every bind rather than kept, which is what Iris does
+	 * ({@code pipeline/CustomTextureManager.java:156}) and what an atlas needs: a resource reload
+	 * stitches it again into a texture of its own, and a view kept across that would be one the
+	 * game has closed. Looked up in the map rather than through {@code TextureManager.getTexture},
+	 * which registers and loads a texture it does not hold yet, so a name nothing answers would
+	 * leave a texture of the game behind it for the rest of the session.
+	 */
+	static GpuTextureView held(Identifier location) {
+		Minecraft minecraft = Minecraft.getInstance();
+		TextureManager manager = minecraft == null ? null : minecraft.getTextureManager();
+		if (manager == null || location == null) {
+			return null;
+		}
+
+		Map<Identifier, AbstractTexture> loaded = ((TextureManagerAccessor) manager).vitrail$byPath();
+		AbstractTexture texture = loaded.get(location);
+		GpuTextureView view = texture == null ? null : viewOf(texture);
+		if (view != null) {
+			return view;
+		}
+
+		AbstractTexture missing = loaded.get(MissingTextureAtlasSprite.getLocation());
+
+		return missing == null ? null : viewOf(missing);
 	}
 
 	/**

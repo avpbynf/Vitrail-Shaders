@@ -251,17 +251,17 @@ final class PackPass {
 		Identifier fragmentId = Identifier.fromNamespaceAndPath(Vitrail.MOD_ID, stem + "/fragment");
 		claim(load, this.path, vertexId, fragmentId);
 
-		this.source = (id, type) -> {
+		this.source = GraphicsApi.source((id, type) -> {
 			if (type == ShaderType.FRAGMENT) {
 				return fragmentId.equals(id) ? fragment : null;
 			}
 
 			return vertexId.equals(id) ? vertex : null;
-		};
+		});
 
 		BindGroupLayout.Builder bindings = BindGroupLayout.builder()
 				.withUniform(UNIFORM_BLOCK, UniformType.UNIFORM_BUFFER);
-		this.samplers.forEach(bindings::withSampler);
+		this.samplers.forEach(name -> GraphicsApi.withSampler(bindings, name));
 		this.storage.forEach(name -> bindings.withUniform(name, UniformType.UNIFORM_BUFFER));
 
 		RenderPipeline.Builder builder = RenderPipeline.builder()
@@ -333,7 +333,7 @@ final class PackPass {
 	 * rebuilt from the game's own shader sources, which do not contain a line of this pack.
 	 */
 	CompiledRenderPipeline compile(GpuDevice device) {
-		return device.precompilePipeline(this.pipeline, this.source);
+		return GraphicsApi.compile(device, this.pipeline, this.source);
 	}
 
 	/** {@code world0/composite4}, which is what a log line and a failure name it by. */
@@ -553,7 +553,7 @@ final class PackPass {
 			this.attachedViews.add(view(targets, attachment));
 		}
 
-		RenderPassDescriptor descriptor = RenderPassDescriptor.create(this.label);
+		PassDescriptor descriptor = PassDescriptor.create(this.label);
 		for (GpuTextureView view : this.attachedViews) {
 			descriptor.withColorAttachment(view, targets.takeClear(view));
 		}
@@ -570,7 +570,7 @@ final class PackPass {
 			targets.flushPending(encoder);
 		}
 
-		try (RenderPass pass = encoder.createRenderPass(descriptor)) {
+		try (RenderPass pass = encoder.createRenderPass(descriptor.build())) {
 			record(pass, targets, depthView, distantView, quad, uniforms);
 		}
 	}
@@ -610,7 +610,7 @@ final class PackPass {
 
 	private void record(RenderPass pass, ColorTargets targets, GpuTextureView depthView,
 			GpuTextureView distantView, GpuBuffer quad, GpuBufferSlice uniforms) {
-		pass.setPipeline(this.pipeline);
+		GraphicsApi.setPipeline(pass, this.pipeline);
 		RenderSystem.bindDefaultUniforms(pass);
 		pass.setUniform(UNIFORM_BLOCK, uniforms);
 		StorageBuffers.bind(pass, this.storage);
@@ -661,7 +661,7 @@ final class PackPass {
 					}
 					return false;
 				}
-				pass.bindTexture(sampler, target.storageView(), sampler(false, FilterMode.NEAREST, false));
+				GraphicsApi.bindTexture(pass, sampler, target.storageView(), sampler(false, FilterMode.NEAREST, false));
 				continue;
 			}
 
@@ -803,9 +803,9 @@ final class PackPass {
 			// it produces a field of stripes that reads as an effect nobody asked for, and it takes
 			// whatever the pack built out of it down with it. A texture of the pack's own says for
 			// itself, in the .mcmeta beside the file.
-			pass.bindTexture(sampler, bound == null ? targets.black() : bound,
+			GraphicsApi.bindTexture(pass, sampler, bound == null ? targets.black() : bound,
 					supplied != null
-							? sampler(source.repeat(), filter, false)
+							? sampler(source.repeat(), filter, source.mipmaps())
 							: sampler(binding.kind(), filter, mipmaps));
 		}
 

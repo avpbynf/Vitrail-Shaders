@@ -7,7 +7,6 @@ import com.mojang.blaze3d.GpuDeviceLossException;
 import com.mojang.blaze3d.GpuFormat;
 import com.mojang.blaze3d.PrimitiveTopology;
 import com.mojang.blaze3d.buffers.GpuBuffer;
-import com.mojang.blaze3d.pipeline.BindGroupLayout;
 import com.mojang.blaze3d.pipeline.ColorTargetState;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.shaders.ShaderSource;
@@ -234,7 +233,7 @@ final class PackDepth {
 			}
 			""", ClipSpace.REVERSED.z, ClipSpace.REVERSED.w);
 
-	private static final ShaderSource SOURCE = (id, type) -> {
+	private static final ShaderSource SOURCE = GraphicsApi.source((id, type) -> {
 		if (type == ShaderType.FRAGMENT) {
 			if (DISTANT_FRAGMENT_ID.equals(id)) {
 				return DISTANT_FRAGMENT;
@@ -244,7 +243,7 @@ final class PackDepth {
 		}
 
 		return VERTEX_ID.equals(id) ? VERTEX : null;
-	};
+	});
 
 	private RenderPipeline pipeline;
 
@@ -887,13 +886,13 @@ final class PackDepth {
 		// Loaded rather than cleared: the draw covers the image whole, so a clear would be one more
 		// write of the same texels.
 		try (RenderPass pass = encoder.createRenderPass(() -> LABEL, into.view(), Optional.empty())) {
-			pass.setPipeline(compiled);
+			GraphicsApi.setPipeline(pass, compiled);
 			RenderSystem.bindDefaultUniforms(pass);
 			pass.setVertexBuffer(0, quad.slice());
 			// NEAREST, and it is what makes this a rewrite of the value and not of the image: one
 			// destination texel covers one source texel, so what a pack fetches here is what it would
 			// have fetched from the depth itself.
-			pass.bindTexture(SAMPLER, live,
+			GraphicsApi.bindTexture(pass, SAMPLER, live,
 					RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST));
 			pass.draw(VERTICES, 1, 0, 0);
 		}
@@ -919,14 +918,14 @@ final class PackDepth {
 
 		try (RenderPass pass = encoder.createRenderPass(() -> DISTANT_LABEL,
 				this.distantScene.view(), Optional.empty())) {
-			pass.setPipeline(compiled);
+			GraphicsApi.setPipeline(pass, compiled);
 			RenderSystem.bindDefaultUniforms(pass);
 			pass.setVertexBuffer(0, quad.slice());
-			pass.bindTexture(BLENDED, blended,
+			GraphicsApi.bindTexture(pass, BLENDED, blended,
 					RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST));
-			pass.bindTexture(CARRIED, carried,
+			GraphicsApi.bindTexture(pass, CARRIED, carried,
 					RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST));
-			pass.bindTexture(PURE, pure,
+			GraphicsApi.bindTexture(pass, PURE, pure,
 					RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST));
 			pass.draw(VERTICES, 1, 0, 0);
 		}
@@ -944,7 +943,7 @@ final class PackDepth {
 			this.distantPipeline = buildDistant();
 		}
 
-		if (device.precompilePipeline(this.distantPipeline, SOURCE).isValid()) {
+		if (GraphicsApi.valid(GraphicsApi.compile(device, this.distantPipeline, SOURCE))) {
 			return this.distantPipeline;
 		}
 
@@ -972,7 +971,7 @@ final class PackDepth {
 			this.pipeline = build();
 		}
 
-		if (device.precompilePipeline(this.pipeline, SOURCE).isValid()) {
+		if (GraphicsApi.valid(GraphicsApi.compile(device, this.pipeline, SOURCE))) {
 			return this.pipeline;
 		}
 
@@ -991,11 +990,7 @@ final class PackDepth {
 				.withVertexShader(VERTEX_ID)
 				.withFragmentShader(DISTANT_FRAGMENT_ID)
 				.withBindGroupLayout(BindGroupLayouts.GLOBALS)
-				.withBindGroupLayout(BindGroupLayout.builder()
-						.withSampler(BLENDED)
-						.withSampler(CARRIED)
-						.withSampler(PURE)
-						.build())
+				.withBindGroupLayout(GraphicsApi.samplers(BLENDED, CARRIED, PURE))
 				.withVertexBinding(0, DefaultVertexFormat.POSITION_TEX)
 				.withColorTargetState(new ColorTargetState(Optional.empty(), FORMAT,
 						ColorTargetState.WRITE_ALL))
@@ -1010,7 +1005,7 @@ final class PackDepth {
 				.withVertexShader(VERTEX_ID)
 				.withFragmentShader(FRAGMENT_ID)
 				.withBindGroupLayout(BindGroupLayouts.GLOBALS)
-				.withBindGroupLayout(BindGroupLayout.builder().withSampler(SAMPLER).build())
+				.withBindGroupLayout(GraphicsApi.samplers(SAMPLER))
 				.withVertexBinding(0, DefaultVertexFormat.POSITION_TEX)
 				.withColorTargetState(new ColorTargetState(Optional.empty(), FORMAT,
 						ColorTargetState.WRITE_ALL))

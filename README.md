@@ -59,7 +59,8 @@ are where I answer.
 
 ## Quick start
 
-- One jar for Fabric and NeoForge, on Minecraft 26.2. On
+- One jar for Fabric and NeoForge, on Minecraft 26.2, and one for 26.3 built
+  from the same tree with `gradlew build -Pminecraft=26.3`. The 26.2 jar is on
   [CurseForge](https://www.curseforge.com/minecraft/mc-mods/vitrail-shaders), on
   [Modrinth](https://modrinth.com/mod/vitrail-shaders) and on every
   [release](https://github.com/avpbynf/Vitrail-Shaders/releases) here.

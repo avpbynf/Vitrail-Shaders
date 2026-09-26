@@ -3,8 +3,6 @@ package dev.vitrail.render;
 import dev.vitrail.uniform.WorldState;
 
 import com.mojang.blaze3d.systems.GpuDevice;
-import com.mojang.blaze3d.vulkan.VulkanDevice;
-import com.mojang.blaze3d.vulkan.glsl.GlslCompiler;
 
 /**
  * What {@link PackDump} needs of a program to be able to name it and read it back.
@@ -55,7 +53,7 @@ interface DumpedProgram {
 	 *                 render thread along with the caches around it
 	 * @return true when a compiled pipeline is now waiting for {@link #compile} to adopt it
 	 */
-	default boolean warmAhead(VulkanDevice device, GlslCompiler compiler) {
+	default boolean warmAhead(AheadCompiler compiler) {
 		return false;
 	}
 

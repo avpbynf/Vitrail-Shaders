@@ -7,6 +7,7 @@ import dev.vitrail.ScreenText;
 import dev.vitrail.settings.PackSession;
 import dev.vitrail.Vitrail;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
@@ -14,7 +15,6 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.Identifier;
 import org.jspecify.annotations.Nullable;
-import org.lwjgl.glfw.GLFW;
 
 import java.nio.file.Path;
 
@@ -46,11 +46,15 @@ public final class SettingsKey {
 	public static final KeyMapping.Category CATEGORY =
 			new KeyMapping.Category(Identifier.fromNamespaceAndPath(Vitrail.MOD_ID, "keybinds"));
 
+	// The default key is a number, and the two games number keys differently: 26.2 hands a mapping
+	// a GLFW key code, 26.3 an SDL scancode, where I is 73 in the first and 12 in the second. The
+	// game's own InputConstants carries each key under one name in the numbering that game uses, so
+	// naming the key through it binds the same physical key under either game.
 	public static final KeyMapping OPEN =
-			new KeyMapping(ScreenText.OPEN_SETTINGS, GLFW.GLFW_KEY_I, CATEGORY);
+			new KeyMapping(ScreenText.OPEN_SETTINGS, InputConstants.KEY_I, CATEGORY);
 
 	public static final KeyMapping RELOAD =
-			new KeyMapping(ScreenText.RELOAD_PACK, GLFW.GLFW_KEY_R, CATEGORY);
+			new KeyMapping(ScreenText.RELOAD_PACK, InputConstants.KEY_R, CATEGORY);
 
 	/** Iris's mapping for its pack screen, by the name it registers under on both backends. */
 	private static final String IRIS_SCREEN_KEY = "iris.keybind.shaderPackSelection";

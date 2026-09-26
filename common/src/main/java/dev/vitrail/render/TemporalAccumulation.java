@@ -8,12 +8,10 @@ import com.mojang.blaze3d.PrimitiveTopology;
 import com.mojang.blaze3d.buffers.GpuBuffer;
 import com.mojang.blaze3d.buffers.GpuBufferSlice;
 import com.mojang.blaze3d.buffers.Std140Builder;
-import com.mojang.blaze3d.pipeline.BindGroupLayout;
 import com.mojang.blaze3d.pipeline.ColorTargetState;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.shaders.ShaderSource;
 import com.mojang.blaze3d.shaders.ShaderType;
-import com.mojang.blaze3d.shaders.UniformType;
 import com.mojang.blaze3d.systems.CommandEncoder;
 import com.mojang.blaze3d.systems.GpuDevice;
 import com.mojang.blaze3d.systems.RenderPass;
@@ -186,13 +184,13 @@ public final class TemporalAccumulation {
 			}
 			""";
 
-	private static final ShaderSource SOURCE = (id, type) -> {
+	private static final ShaderSource SOURCE = GraphicsApi.source((id, type) -> {
 		if (type == ShaderType.FRAGMENT) {
 			return FRAGMENT_ID.equals(id) ? FRAGMENT : null;
 		}
 
 		return VERTEX_ID.equals(id) ? VERTEX : null;
-	};
+	});
 
 	private RenderPipeline pipeline;
 	private TargetSurface[] history;
@@ -329,19 +327,19 @@ public final class TemporalAccumulation {
 
 		try (RenderPass pass = encoder.createRenderPass(() -> LABEL, this.history[into].view(),
 				Optional.empty())) {
-			pass.setPipeline(compiled);
+			GraphicsApi.setPipeline(pass, compiled);
 			RenderSystem.bindDefaultUniforms(pass);
 			pass.setUniform(UNIFORM_BLOCK, this.block.currentBuffer());
 			pass.setVertexBuffer(0, quad.slice());
-			pass.bindTexture(CURRENT, scene,
+			GraphicsApi.bindTexture(pass, CURRENT, scene,
 					RenderSystem.getSamplerCache().getClampToEdge(FilterMode.LINEAR));
 			// LINEAR on the history, because the reprojected coordinate lands between texels and a
 			// nearest fetch there is a quarter pixel of jitter added to every frame of the fold.
-			pass.bindTexture(HISTORY, this.history[this.current].view(),
+			GraphicsApi.bindTexture(pass, HISTORY, this.history[this.current].view(),
 					RenderSystem.getSamplerCache().getClampToEdge(FilterMode.LINEAR));
 			// NEAREST on the vectors: a filtered vector across a silhouette is the average of two
 			// surfaces moving differently, which points at neither of them.
-			pass.bindTexture(VECTORS, vectors,
+			GraphicsApi.bindTexture(pass, VECTORS, vectors,
 					RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST));
 			pass.draw(VERTICES, 1, 0, 0);
 		}
@@ -421,7 +419,7 @@ public final class TemporalAccumulation {
 
 		RuntimeException thrown = null;
 		try {
-			if (device.precompilePipeline(this.pipeline, SOURCE).isValid()) {
+			if (GraphicsApi.valid(GraphicsApi.compile(device, this.pipeline, SOURCE))) {
 				return this.pipeline;
 			}
 		} catch (GpuDeviceLossException e) {
@@ -447,12 +445,7 @@ public final class TemporalAccumulation {
 				.withVertexShader(VERTEX_ID)
 				.withFragmentShader(FRAGMENT_ID)
 				.withBindGroupLayout(BindGroupLayouts.GLOBALS)
-				.withBindGroupLayout(BindGroupLayout.builder()
-						.withUniform(UNIFORM_BLOCK, UniformType.UNIFORM_BUFFER)
-						.withSampler(CURRENT)
-						.withSampler(HISTORY)
-						.withSampler(VECTORS)
-						.build())
+				.withBindGroupLayout(GraphicsApi.blockAndSamplers(UNIFORM_BLOCK, CURRENT, HISTORY, VECTORS))
 				.withVertexBinding(0, DefaultVertexFormat.POSITION_TEX)
 				.withColorTargetState(new ColorTargetState(Optional.empty(), FORMAT,
 						ColorTargetState.WRITE_ALL))

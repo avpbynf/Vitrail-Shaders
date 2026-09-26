@@ -187,7 +187,7 @@ final class EntityProgram extends FamilyProgram {
 				// the map's refusal is about the target, the lookup is about the program name.
 				shadow ? Optional.<BlendFunction>empty()
 						: BlendFunctions.of(ProgramFallbacks.blendOverride(element.program()),
-								game.getColorTargetState().blendFunction()),
+								GraphicsApi.colorTarget(game).blendFunction()),
 				// covers: the mask on every piece drawn before the seed and on no other, which is
 				// Element.covers and is answered there, beside the question of which side of the
 				// stage a piece is drawn on. It is what takes draw buffer nought of those pieces off

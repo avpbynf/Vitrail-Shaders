@@ -7,8 +7,6 @@ import com.mojang.blaze3d.systems.GpuDevice;
 import com.mojang.blaze3d.systems.RenderPass;
 import com.mojang.blaze3d.systems.RenderPassDescriptor;
 import com.mojang.blaze3d.textures.GpuTextureView;
-import com.mojang.blaze3d.vulkan.VulkanDevice;
-import com.mojang.blaze3d.vulkan.glsl.GlslCompiler;
 
 /**
  * What every family's program is over the {@link GeometryProgram} it holds: the part of the
@@ -68,8 +66,8 @@ abstract class FamilyProgram implements DumpedProgram {
 
 	/** @see GeometryProgram#warmAhead */
 	@Override
-	public boolean warmAhead(VulkanDevice device, GlslCompiler compiler) {
-		return this.body.warmAhead(device, compiler);
+	public boolean warmAhead(AheadCompiler compiler) {
+		return this.body.warmAhead(compiler);
 	}
 
 	/** @see GeometryProgram#discardAhead */

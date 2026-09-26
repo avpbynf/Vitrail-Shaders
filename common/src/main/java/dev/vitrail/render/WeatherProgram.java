@@ -90,7 +90,7 @@ final class WeatherProgram extends FamilyProgram {
 
 		return new WeatherProgram(new GeometryProgram(new GeometryProgram.Pass(FAMILY,
 				element.element(), NAMESPACE, ANSWERED, false,
-				game.getColorTargetState().blendFunction(),
+				GraphicsApi.colorTarget(game).blendFunction(),
 				// No coverage mask, and the sky's rule is the one that decides it: the mask is written
 				// whatever the blend, so a curtain of rain that is a hundred parts transparent to one
 				// part water would claim every pixel it spans. It is also drawn long after the seed,

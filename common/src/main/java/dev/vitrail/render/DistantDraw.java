@@ -20,7 +20,6 @@ import com.mojang.blaze3d.PrimitiveTopology;
 import com.mojang.blaze3d.buffers.GpuBuffer;
 import com.mojang.blaze3d.buffers.GpuBufferSlice;
 import com.mojang.blaze3d.buffers.Std140Builder;
-import com.mojang.blaze3d.pipeline.BindGroupLayout;
 import com.mojang.blaze3d.pipeline.ColorTargetState;
 import com.mojang.blaze3d.pipeline.DepthStencilState;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
@@ -28,7 +27,6 @@ import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.platform.CompareOp;
 import com.mojang.blaze3d.shaders.ShaderSource;
 import com.mojang.blaze3d.shaders.ShaderType;
-import com.mojang.blaze3d.shaders.UniformType;
 import com.mojang.blaze3d.systems.CommandEncoder;
 import com.mojang.blaze3d.systems.GpuDevice;
 import com.mojang.blaze3d.systems.RenderPass;
@@ -272,13 +270,13 @@ public final class DistantDraw extends FamilyDraw {
 			}
 			""";
 
-	private static final ShaderSource SEED_SOURCE = (id, type) -> {
+	private static final ShaderSource SEED_SOURCE = GraphicsApi.source((id, type) -> {
 		if (type == ShaderType.FRAGMENT) {
 			return SEED_FRAGMENT_ID.equals(id) ? SEED_FRAGMENT : null;
 		}
 
 		return SEED_VERTEX_ID.equals(id) ? SEED_VERTEX : null;
-	};
+	});
 
 	private final PackChain owner;
 	private final Path packPath;
@@ -634,15 +632,15 @@ public final class DistantDraw extends FamilyDraw {
 		try (RenderPass pass = device.createCommandEncoder().createRenderPass(
 				() -> SEED_LABEL, this.worldCarried.view(), Optional.empty(), this.blendedView,
 				java.util.OptionalDouble.empty())) {
-			pass.setPipeline(compiled);
+			GraphicsApi.setPipeline(pass, compiled);
 			RenderSystem.bindDefaultUniforms(pass);
 			pass.setVertexBuffer(0, quad.slice());
 			pass.setUniform(SEED_BLOCK, block);
 			// NEAREST on both, and it is what makes this a rewrite of the value rather than of the
 			// image: one destination texel covers one source texel in each.
-			pass.bindTexture(SEED_WORLD, world,
+			GraphicsApi.bindTexture(pass, SEED_WORLD, world,
 					RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST));
-			pass.bindTexture(SEED_FAR, this.depthView,
+			GraphicsApi.bindTexture(pass, SEED_FAR, this.depthView,
 					RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST));
 			pass.draw(SEED_VERTICES, 1, 0, 0);
 		}
@@ -704,7 +702,7 @@ public final class DistantDraw extends FamilyDraw {
 		}
 
 		try (RenderPass pass = GeometryHold.open(device.createCommandEncoder(), descriptor)) {
-			pass.setPipeline(pipeline);
+			GraphicsApi.setPipeline(pass, pipeline);
 			program.bind(pass);
 
 			for (int index = 0; index < sections.size(); index++) {
@@ -845,7 +843,7 @@ public final class DistantDraw extends FamilyDraw {
 				// the hold too, through the door CommandEncoderMixin holds open for every clear.
 				GeometryHold.flush(() -> "the far terrain's depth being emptied");
 				if (descriptor != null) {
-					descriptor.withDepthAttachment(into, clear);
+					descriptor = GraphicsApi.withDepthAttachment(descriptor, into, clear);
 				}
 			} else {
 				encoder.clearDepthTexture(this.depth, 0.0);
@@ -867,7 +865,7 @@ public final class DistantDraw extends FamilyDraw {
 				? encoder.createRenderPass(() -> "Vitrail " + element.element(),
 						main.getColorTextureView(), Optional.empty(), into, clear)
 				: GeometryHold.open(encoder, descriptor)) {
-			pass.setPipeline(pipeline);
+			GraphicsApi.setPipeline(pass, pipeline);
 			program.bind(pass);
 
 			for (int index = 0; index < sections.size(); index++) {
@@ -923,7 +921,7 @@ public final class DistantDraw extends FamilyDraw {
 			return true;
 		}
 
-		RenderPass.RenderArea area = descriptor.renderArea;
+		RenderPass.RenderArea area = GraphicsApi.renderArea(descriptor);
 
 		return area != null && area.x() == 0 && area.y() == 0
 				&& area.width() >= this.depthWidth && area.height() >= this.depthHeight;
@@ -1015,7 +1013,7 @@ public final class DistantDraw extends FamilyDraw {
 			this.seedPipeline = buildSeed();
 		}
 
-		if (device.precompilePipeline(this.seedPipeline, SEED_SOURCE).isValid()) {
+		if (GraphicsApi.valid(GraphicsApi.compile(device, this.seedPipeline, SEED_SOURCE))) {
 			return this.seedPipeline;
 		}
 
@@ -1038,11 +1036,7 @@ public final class DistantDraw extends FamilyDraw {
 				.withVertexShader(SEED_VERTEX_ID)
 				.withFragmentShader(SEED_FRAGMENT_ID)
 				.withBindGroupLayout(BindGroupLayouts.GLOBALS)
-				.withBindGroupLayout(BindGroupLayout.builder()
-						.withUniform(SEED_BLOCK, UniformType.UNIFORM_BUFFER)
-						.withSampler(SEED_WORLD)
-						.withSampler(SEED_FAR)
-						.build())
+				.withBindGroupLayout(GraphicsApi.blockAndSamplers(SEED_BLOCK, SEED_WORLD, SEED_FAR))
 				.withVertexBinding(0, DefaultVertexFormat.POSITION_TEX)
 				.withColorTargetState(new ColorTargetState(Optional.empty(), CARRIED_FORMAT,
 						ColorTargetState.WRITE_ALL))

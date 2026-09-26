@@ -76,7 +76,8 @@ import org.joml.Vector3f;
  * flag, so the pipeline is the pack's {@code shadow} program and the render pass is opened on the
  * shadow map. The geometry, the regions and the push constants stay exactly where they were, which
  * is the only way to touch the most internal code Sodium has under a licence this project may not
- * copy from.
+ * copy from. Sodium for 26.3 takes the pass from its caller instead of opening it, so there the
+ * pass is opened by {@link SodiumApi}, on the same descriptor the mixin would have handed back.
  * <p>
  * <strong>The matrices handed over are the camera's, deliberately, and they are not what the shadow
  * is drawn with.</strong> They go into Sodium's own {@code u_Globals}, which our programs never
@@ -357,8 +358,8 @@ public final class ShadowTerrain {
 			// its map keeps the far terrain out with it, and getting this wrong is not a nuance: a
 			// pack that asked for neither would see LODs in its map here and none under Iris.
 			DistantDraw.shadow(false, camera);
-			TerrainDraw.shadowPass(() -> renderer.drawChunkLayer(ChunkSectionLayerGroup.OPAQUE,
-					matrices, camera.x, camera.y, camera.z, sampler));
+			TerrainDraw.shadowPass(() -> SodiumApi.drawShadowLayer(renderer,
+					ChunkSectionLayerGroup.OPAQUE, matrices, camera, sampler));
 		}
 
 		// The store is taken HERE and nowhere else: with the opaque world in the map and before the
@@ -393,8 +394,8 @@ public final class ShadowTerrain {
 			// (shadows/ShadowRenderer.java:598-601). shadowtex1 is the map WITHOUT the translucents,
 			// and far water belongs on the same side of it as near water.
 			DistantDraw.shadow(true, camera);
-			TerrainDraw.shadowPass(() -> renderer.drawChunkLayer(ChunkSectionLayerGroup.TRANSLUCENT,
-					matrices, camera.x, camera.y, camera.z, sampler));
+			TerrainDraw.shadowPass(() -> SodiumApi.drawShadowLayer(renderer,
+					ChunkSectionLayerGroup.TRANSLUCENT, matrices, camera, sampler));
 		}
 
 		// And the chain last of all, on a map nothing else will write this frame, which is where

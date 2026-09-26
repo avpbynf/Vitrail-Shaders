@@ -147,10 +147,10 @@ final class ColorTargets {
 
 	/**
 	 * What one sampler is handed for a texture the pack ships: the image, and how the pack asked for
-	 * it to be read. The three travel together because they are one answer, written in one directive
-	 * and the {@code .mcmeta} beside its file, rather than three questions for three places.
+	 * it to be read. They travel together because they are one answer, written in one directive and
+	 * the {@code .mcmeta} beside its file, rather than several questions for several places.
 	 */
-	record PackBinding(GpuTextureView view, FilterMode filter, boolean repeat) {
+	record PackBinding(GpuTextureView view, FilterMode filter, boolean repeat, boolean mipmaps) {
 	}
 
 	/** The schedule the plan gave these targets, for a pass to settle its own step off. */
@@ -161,9 +161,10 @@ final class ColorTargets {
 	/**
 	 * What the pack supplies for a name, settled once: the image, and the filter and addressing
 	 * its directive and its .mcmeta asked for. Only the view behind the image moves after that,
-	 * and {@link #packView} answers it per frame.
+	 * and {@link #packView} answers it per frame. Only a texture the game holds climbs past level
+	 * nought, a file the pack ships being uploaded as one level.
 	 */
-	record PackSource(PackImages.Image image, FilterMode filter, boolean repeat) {
+	record PackSource(PackImages.Image image, FilterMode filter, boolean repeat, boolean mipmaps) {
 	}
 
 	private final TargetPlan plan;
@@ -713,14 +714,14 @@ final class ColorTargets {
 			int height = group.get(0).view().texture().getHeight(0);
 			for (int from = 0; from < group.size(); from += perPass) {
 				int to = Math.min(from + perPass, group.size());
-				RenderPassDescriptor descriptor = RenderPassDescriptor.create(() -> CLEAR_LABEL);
+				PassDescriptor descriptor = PassDescriptor.create(() -> CLEAR_LABEL);
 				for (int index = from; index < to; index++) {
 					Pending one = group.get(index);
 					descriptor.withColorAttachment(one.view(), Optional.of(one.colour()));
 				}
 
 				descriptor.withRenderArea(new RenderPass.RenderArea(0, 0, width, height));
-				encoder.createRenderPass(descriptor).close();
+				encoder.createRenderPass(descriptor.build()).close();
 			}
 		}
 	}
@@ -1137,6 +1138,12 @@ final class ColorTargets {
 		for (PackImages.Image image : images) {
 			Vitrail.logger().info("The pack supplies {}", PackImages.describe(image));
 
+			// Nothing to allocate for a texture the game holds: packView asks the game for it at
+			// every bind, and an image of our own here would be a copy of nothing.
+			if (image.live()) {
+				continue;
+			}
+
 			// On the render thread, and before the pack-load worker exists: this is what answers the
 			// device for every format the pack supplies, so a geometry program built off thread
 			// reads the table rather than filling it. The note belongs here for the same reason.
@@ -1191,7 +1198,8 @@ final class ColorTargets {
 		PackSource source = packSource(stage, sampler);
 		GpuTextureView view = source == null ? null : packView(source.image());
 
-		return view == null ? null : new PackBinding(view, source.filter(), source.repeat());
+		return view == null ? null
+				: new PackBinding(view, source.filter(), source.repeat(), source.mipmaps());
 	}
 
 	/**
@@ -1206,7 +1214,16 @@ final class ColorTargets {
 
 		boolean flat = !sampler.equals(SamplerPlan.behind(sampler));
 
-		return new PackSource(image, filterFor(image), !flat && !image.texture().clamp());
+		// A texture the game holds is read the way Iris reads it, through MIPPED_NEAREST_REPEAT
+		// (gl/texture/TextureWrapper.java:27-29): nearest within a level, repeating, and down the
+		// levels the game built for it, which is what an atlas read from far away needs to stay
+		// the colour of its blocks rather than a shimmer of single texels. It has no .mcmeta of the
+		// pack's to ask otherwise.
+		if (image.live()) {
+			return new PackSource(image, FilterMode.NEAREST, !flat, true);
+		}
+
+		return new PackSource(image, filterFor(image), !flat && !image.texture().clamp(), false);
 	}
 
 	/**
@@ -1244,8 +1261,15 @@ final class ColorTargets {
 		});
 	}
 
-	/** The view behind a supplied image, or null while nothing could be put behind it. */
+	/**
+	 * The view behind a supplied image, or null while nothing could be put behind it. For one bound
+	 * live, whatever the game holds under its name as this is asked, which is what an atlas needs.
+	 */
 	GpuTextureView packView(PackImages.Image image) {
+		if (image.live()) {
+			return GameImages.held(PackImages.location(image.texture().path()));
+		}
+
 		TargetSurface surface = this.packSurfaces.get(image);
 
 		return surface == null ? null : surface.view();

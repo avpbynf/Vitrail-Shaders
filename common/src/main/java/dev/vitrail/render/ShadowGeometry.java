@@ -196,9 +196,9 @@ public final class ShadowGeometry {
 		//
 		// The partial tick is the camera's own accessor, which is what the game passes for this same
 		// extraction (GameRenderer.java:391); Iris passes its captured tick delta. It reaches only the
-		// hurt and death timers of the camera entity's state (Camera.java:143-144).
-		view.extractRenderState(STATE.cameraRenderState,
-				view.getCameraEntityPartialTicks(minecraft.getDeltaTracker()));
+		// hurt and death timers of the camera entity's state (Camera.java:143-144). 26.3 takes the
+		// tracker and asks the same accessor itself, which GameRender carries.
+		GameRender.extractCamera(view, STATE.cameraRenderState, minecraft.getDeltaTracker());
 		if (!TerrainDraw.drawnShadowPair(STATE.cameraRenderState.viewRotationMatrix,
 				STATE.cameraRenderState.projectionMatrix)) {
 			return;
@@ -324,7 +324,9 @@ public final class ShadowGeometry {
 
 		EntityDraw.shadowFeatures(true);
 		try {
-			dispatcher.renderAllFeatures(storage);
+			// Through the seam because 26.3 wants the pass from its caller where 26.2 let every draw
+			// open its own; GameRender says which pass that is on each game.
+			GameRender.renderAllFeatures(dispatcher, storage, () -> "Vitrail shadow casters");
 		} finally {
 			// Lowered whatever happened, and this is the one flag of the three that nothing else
 			// would lower: the other two are closed by the game's own events, and there is no event
@@ -404,7 +406,9 @@ public final class ShadowGeometry {
 
 		if (casters.entities()) {
 			for (Entity entity : minecraft.level.entitiesForRendering()) {
-				if (visible(minecraft, entities, entity, frustum, at)) {
+				// The entity's own tick, which extract takes too and 26.3's culling box is built at.
+				float partial = delta.getGameTimeDeltaPartialTick(!ticks.isEntityFrozen(entity));
+				if (visible(minecraft, entities, entity, frustum, at, partial)) {
 					STATE.entityRenderStates.add(extract(entities, delta, ticks, entity));
 				}
 			}
@@ -501,13 +505,13 @@ public final class ShadowGeometry {
 	 * Nothing makes Iris's shape impossible here.
 	 */
 	private static boolean visible(Minecraft minecraft, EntityRenderDispatcher entities, Entity entity,
-			Frustum frustum, Vec3 at) {
+			Frustum frustum, Vec3 at, float partial) {
 		if (entity instanceof Player spectator && spectator.isSpectator()) {
 			return false;
 		}
 
 		Player player = minecraft.player;
-		if (!entities.shouldRender(entity, frustum, at.x, at.y, at.z)
+		if (!GameRender.shouldRender(entities, entity, frustum, at, partial)
 				&& (player == null || !entity.hasIndirectPassenger(player))) {
 			return false;
 		}
@@ -515,7 +519,7 @@ public final class ShadowGeometry {
 		BlockPos block = entity.blockPosition();
 
 		return minecraft.level.isOutsideBuildHeight(block.getY())
-				|| minecraft.levelRenderer.isSectionCompiledAndVisible(block);
+				|| GameRender.sectionShown(minecraft.levelRenderer, block);
 	}
 
 	/** Poses everything extracted about the camera and hands it to our own storage. */

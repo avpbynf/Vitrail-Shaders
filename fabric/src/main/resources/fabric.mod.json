@@ -25,11 +25,12 @@
 	},
 	"mixins": [
 		"vitrail.mixins.json",
+		"vitrail-game.mixins.json",
 		"vitrail-fabric.mixins.json"
 	],
 	"depends": {
 		"fabricloader": ">=${fabric_loader_min_version}",
-		"minecraft": ">=${minecraft_version} <26.3",
+		"minecraft": ">=${minecraft_version} <${minecraft_next}",
 		"sodium": "0.9.x",
 		"fabric-key-mapping-api-v1": "*",
 		"fabric-lifecycle-events-v1": "*"

@@ -448,9 +448,9 @@ public final class HandDraw {
 			// either of them to carry, and a draw this engine hands back to the game lands in the
 			// same pixels as one it serves.
 			modelViewStack.identity();
-			gameRenderer.itemInHandRenderer.submitHandsWithItems(partial, new PoseStack(),
-					this.submits, player, light);
-			this.dispatcher.renderAllFeatures(this.submits);
+			GameRender.submitHands(gameRenderer, partial, new PoseStack(), this.submits, player,
+					light);
+			GameRender.renderAllFeatures(this.dispatcher, this.submits, () -> "Vitrail hand");
 		} finally {
 			half = null;
 			modelViewStack.popMatrix();

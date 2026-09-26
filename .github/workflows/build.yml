@@ -52,4 +52,11 @@ jobs:
 
       # What this refuses is whatever build.gradle refuses on the day it runs. Naming the gates here
       # as well would only give them a third home to drift out of step with.
+      #
+      # Once per game the tree builds for, in one job rather than a matrix: the rulesets require a
+      # check named build, and a matrix would rename it after each game. The default build comes
+      # first, so a failure there is the one the log opens on; the other games follow in the
+      # order versions/ lists them.
       - run: ./gradlew build
+
+      - run: ./gradlew build -Pminecraft=26.3

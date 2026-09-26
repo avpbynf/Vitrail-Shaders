@@ -229,7 +229,7 @@ public final class GeometryHold {
 			return DEPTH_DIFFERS;
 		}
 
-		RenderPass.RenderArea area = descriptor.renderArea;
+		RenderPass.RenderArea area = GraphicsApi.renderArea(descriptor);
 		boolean sameArea = area != null && area.x() == areaX && area.y() == areaY
 				&& area.width() == areaW && area.height() == areaH;
 
@@ -267,7 +267,7 @@ public final class GeometryHold {
 		depth = descriptor.depthAttachment() == null
 				? null
 				: descriptor.depthAttachment().textureView().texture();
-		RenderPass.RenderArea area = descriptor.renderArea;
+		RenderPass.RenderArea area = GraphicsApi.renderArea(descriptor);
 		if (area == null) {
 			areaX = 0;
 			areaY = 0;

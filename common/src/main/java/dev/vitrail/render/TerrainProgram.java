@@ -20,8 +20,6 @@ import com.mojang.blaze3d.textures.GpuSampler;
 import com.mojang.blaze3d.textures.GpuTextureView;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import com.mojang.blaze3d.vertex.VertexFormatElement;
-import com.mojang.blaze3d.vulkan.VulkanDevice;
-import com.mojang.blaze3d.vulkan.glsl.GlslCompiler;
 
 import java.io.IOException;
 import java.util.EnumMap;
@@ -99,7 +97,7 @@ public final class TerrainProgram extends FamilyProgram {
 	 * six on-demand families take the base's road; this one turns it off where it stands.
 	 */
 	@Override
-	public boolean warmAhead(VulkanDevice device, GlslCompiler compiler) {
+	public boolean warmAhead(AheadCompiler compiler) {
 		return false;
 	}
 

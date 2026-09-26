@@ -1,0 +1,18 @@
+{
+	"required": true,
+	"minVersion": "0.8.5",
+	"package": "dev.vitrail.mixin.game",
+	"compatibilityLevel": "JAVA_21",
+	"injectors": {
+		"defaultRequire": 1
+	},
+	"client": [
+		"ArenaAggregatorMixin",
+		"GameRendererHandMixin",
+		"IntermediaryShaderModuleAccessor",
+		"IntermediaryShaderModuleMixin",
+		"ItemInHandRendererMixin",
+		"SkyRendererMixin",
+		"VulkanBindGroupLayoutMixin"
+	]
+}

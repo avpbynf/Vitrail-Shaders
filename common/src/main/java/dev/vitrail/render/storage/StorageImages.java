@@ -8,7 +8,6 @@ import dev.vitrail.pack.model.PackTexture;
 import dev.vitrail.pack.model.TargetFormat;
 import dev.vitrail.pack.texture.CustomImageView;
 import dev.vitrail.pack.texture.CustomImages;
-import dev.vitrail.render.StalePipelines;
 import dev.vitrail.Vitrail;
 
 import com.mojang.blaze3d.GpuDeviceLossException;

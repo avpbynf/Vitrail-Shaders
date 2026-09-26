@@ -31,7 +31,7 @@ import java.util.Set;
  * lives.</strong> Iris replaces {@code gl_Color} with
  * {@code vec4(ColorModulator.rgb, ColorModulator.a * GlintAlpha)}
  * ({@code VanillaTransformer.java:134}). The modulator is white for every draw the game prepares
- * from a render type, which {@link LegacyGlsl#GAME_TRANSFORMS_BLOCK} sets out, so what is left of
+ * from a render type, which {@link GameTransforms#BLOCK} sets out, so what is left of
  * that expression here is the alpha: {@link LegacyGlsl#GLINT_ALPHA}, which is the same number Iris
  * reads out of the game's globals block and this engine answers from the frame's own snapshot of the
  * field that fills it.

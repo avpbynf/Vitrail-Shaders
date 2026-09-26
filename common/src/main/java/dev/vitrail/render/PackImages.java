@@ -51,8 +51,9 @@ import java.util.Optional;
  * rather than falling back to the colour target it shares a name with: Complementary points
  * {@code texture.deferred.colortex3} at a cloud and water lookup table, and a line of it this
  * engine refused handing the name back would have its deferred read the scene as that table. A
- * texture of the game that no loaded resource pack ships in a readable form reads the game's
- * missing texture, as it does under Iris.
+ * texture of the game that no loaded resource pack ships at all is bound live, as whatever the
+ * game holds under that name, which is how an atlas is served; one shipped in a form this cannot
+ * read reads the game's missing texture, as it does under Iris.
  */
 final class PackImages {
 
@@ -81,10 +82,20 @@ final class PackImages {
 	 *               green and blue rather than converted out of the grey colour space
 	 * @param format what the surface is allocated as, which is what the pixels are
 	 * @param shape  one clause for the log, saying what was read and how big it came out
+	 * @param live   whether this is no copy at all but a texture the GAME holds, looked up under the
+	 *               path the pack wrote every time a draw binds it: an atlas, which is stitched at
+	 *               runtime and is no file of any resource pack. Nothing is decoded, allocated or
+	 *               uploaded for one, so its sizes are nought and its pixels empty
 	 */
 	@SuppressWarnings("ArrayRecordComponent")
 	record Image(PackTexture texture, int width, int height, byte[] pixels, GpuFormat format,
-			String shape) {
+			String shape, boolean live) {
+
+		/** A copy this engine decoded and will upload, which is every image but the live ones. */
+		Image(PackTexture texture, int width, int height, byte[] pixels, GpuFormat format,
+				String shape) {
+			this(texture, width, height, pixels, format, shape, false);
+		}
 
 		long bytes() {
 			return this.pixels.length;
@@ -259,35 +270,36 @@ final class PackImages {
 	}
 
 	/**
-	 * A texture the GAME owns, named by the pack as {@code namespace:path} and read out of the
-	 * resource packs the client has loaded rather than out of the shader pack. The game's missing
-	 * texture when no loaded pack ships a readable image under that name, which is what Iris binds
-	 * then ({@code pipeline/CustomTextureManager.java:156}); null only for a name the client cannot
-	 * be asked for at all. The reason is in the notes.
+	 * A texture the GAME owns, named by the pack as {@code namespace:path}: read out of the resource
+	 * packs the client has loaded where one of them ships a file under that name, and otherwise
+	 * bound live, as whatever the game holds under that name when a draw asks. Null only for a name
+	 * the client cannot be asked for at all. The reason is in the notes.
 	 * <p>
 	 * The one place in this class that names an API of the game, and it is asked defensively for
 	 * the reason the rest of the class avoids it: outside a running client there is no client to
 	 * ask, and reading a pack has to keep working there.
 	 * <p>
-	 * Read once here, where Iris re-asks the texture manager at every bind, so a resource pack
-	 * swapped under a running client is not followed until the shader pack is read again. Two cases
-	 * Iris serves this cannot serve at all, and both are named rather than given something
-	 * plausible. An ATLAS, which is stitched at runtime and is no file of any resource pack. And a
-	 * normal or specular map reached from a texture NAME, which is a different door from the one
-	 * {@link PbrAtlases} opens: the maps that follow the atlases are built there, off the sprites
-	 * the game stitched, where this method is asked for a path a pack wrote in its own properties.
+	 * <strong>A name no file answers is bound live, and an ATLAS is why.</strong> An atlas is
+	 * stitched at runtime and is no file of any resource pack, so reading it out of one found
+	 * nothing, and the game's missing texture stood in for it. That checker is exactly what a pack
+	 * got back: Complementary Reimagined names {@code minecraft:textures/atlas/blocks.png}
+	 * ({@code shaders.properties:235}) for the blocks its world space reflections are coloured
+	 * with, and every block reflected off screen came out magenta and black. Iris asks the texture
+	 * manager at every bind ({@code pipeline/CustomTextureManager.java:156}), and a live image is
+	 * that same question, asked by {@link GameImages#held} as a draw binds it. What that answers
+	 * where the game holds nothing under the name is the game's missing texture, which is what
+	 * Iris binds then as well.
+	 * <p>
+	 * A file IS read once here, where Iris re-asks at every bind, so a resource pack swapped under a
+	 * running client is not followed until the shader pack is read again. One case Iris serves
+	 * this cannot, named rather than given something plausible: a normal or specular map reached
+	 * from a texture NAME, which is a different door from the one {@link PbrAtlases} opens. The maps
+	 * that follow the atlases are built there, off the sprites the game stitched, where this method
+	 * is asked for a path a pack wrote in its own properties.
 	 */
 	private static Image gameResource(PackTexture texture, List<String> notes) {
 		String path = texture.path();
-
-		// Split rather than cut at the first colon: a name carrying more than one keeps its first
-		// two parts and drops the rest, which is what Iris makes of such a name.
-		// Limit 0, the one-argument reading. It matters which one: tryBuild accepts an empty path,
-		// so a name written 'minecraft:' would build an identifier under any limit that kept the
-		// empty term, and the missing texture below would be served for a name this client cannot
-		// be asked for, which reads black.
-		String[] parts = path.split(":", 0);
-		Identifier location = parts.length < 2 ? null : Identifier.tryBuild(parts[0], parts[1]);
+		Identifier location = location(path);
 		Minecraft client = Minecraft.getInstance();
 		if (location == null || client == null) {
 			notes.add(path + " is not a resource this client can be asked for, so "
@@ -298,7 +310,13 @@ final class PackImages {
 
 		Optional<Resource> resource = client.getResourceManager().getResource(location);
 		if (resource.isEmpty()) {
-			return missing(texture, notes, path + " is not a file any loaded resource pack ships");
+			notes.add(path + " is no file any loaded resource pack ships, so " + texture.sampler()
+					+ " reads the texture the game holds under that name as each draw binds it,"
+					+ " which is how an atlas is served, and the game's missing texture while it"
+					+ " holds none");
+
+			return new Image(texture, 0, 0, new byte[0], GpuFormat.RGBA8_UNORM,
+					"the game's own texture, looked up at every bind", true);
 		}
 
 		try (InputStream stream = resource.get().open()) {
@@ -315,6 +333,21 @@ final class PackImages {
 		} catch (IOException | RuntimeException e) {
 			return missing(texture, notes, path + " could not be read: " + e.getMessage());
 		}
+	}
+
+	/**
+	 * The identifier a pack's {@code namespace:path} names, or null where it names none.
+	 * <p>
+	 * Split rather than cut at the first colon: a name carrying more than one keeps its first two
+	 * parts and drops the rest, which is what Iris makes of such a name. Limit 0, the one-argument
+	 * reading. It matters which one: tryBuild accepts an empty path, so a name written
+	 * {@code minecraft:} would build an identifier under any limit that kept the empty term, and the
+	 * missing texture would be served for a name this client cannot be asked for, which reads black.
+	 */
+	static Identifier location(String path) {
+		String[] parts = path.split(":", 0);
+
+		return parts.length < 2 ? null : Identifier.tryBuild(parts[0], parts[1]);
 	}
 
 	/** The game's own missing texture, for a resource it could not hand over. */

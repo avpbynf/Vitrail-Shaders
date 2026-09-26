@@ -48,6 +48,22 @@ dependencies {
 	compileOnly("net.caffeinemc:sodium-fabric:${project.sodium_version}") {
 		transitive = false
 	}
+
+	// The tests that need neither a game running nor a pack: they read the game's own shader
+	// includes, and drive the game's own std140 builder, out of the game jar this module is compiled
+	// against, so they hold for either game.
+	testImplementation platform("org.junit:junit-bom:${project.junit_version}")
+	testImplementation "org.junit.jupiter:junit-jupiter"
+	testRuntimeOnly "org.junit.platform:junit-platform-launcher"
+}
+
+// The game is wired into the main source set only, and its jar is where the includes are and where
+// the std140 builder is. Compiled against as well as run against, for the builder.
+sourceSets.test.compileClasspath += sourceSets.main.compileClasspath
+
+tasks.named("test", Test).configure {
+	useJUnitPlatform()
+	classpath += sourceSets.main.runtimeClasspath
 }
 
 // The mod's logo, again, under a name the texture manager can reach: it is what Sodium is handed as

@@ -115,7 +115,7 @@ record Emitter(ProgramStage stage, VertexInputs inputs, List<String> bound, Alph
 		// once per draw and ours is written once per run, which is the whole reason a matrix that
 		// changes with the draw is read from over there.
 		if (this.gameTextureMatrix > 0 || this.gameModelView > 0) {
-			lines.addAll(LegacyGlsl.GAME_TRANSFORMS_BLOCK);
+			lines.addAll(GameTransforms.BLOCK);
 		}
 
 		// Written here, in the order the program handed over, rather than left in the body. The

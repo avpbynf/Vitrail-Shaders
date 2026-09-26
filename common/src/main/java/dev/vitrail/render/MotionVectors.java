@@ -10,12 +10,10 @@ import com.mojang.blaze3d.PrimitiveTopology;
 import com.mojang.blaze3d.buffers.GpuBuffer;
 import com.mojang.blaze3d.buffers.GpuBufferSlice;
 import com.mojang.blaze3d.buffers.Std140Builder;
-import com.mojang.blaze3d.pipeline.BindGroupLayout;
 import com.mojang.blaze3d.pipeline.ColorTargetState;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.shaders.ShaderSource;
 import com.mojang.blaze3d.shaders.ShaderType;
-import com.mojang.blaze3d.shaders.UniformType;
 import com.mojang.blaze3d.systems.CommandEncoder;
 import com.mojang.blaze3d.systems.GpuDevice;
 import com.mojang.blaze3d.systems.RenderPass;
@@ -181,13 +179,13 @@ final class MotionVectors {
 			}
 			""", ClipSpace.REVERSED.w, ClipSpace.REVERSED.z);
 
-	private static final ShaderSource SOURCE = (id, type) -> {
+	private static final ShaderSource SOURCE = GraphicsApi.source((id, type) -> {
 		if (type == ShaderType.FRAGMENT) {
 			return FRAGMENT_ID.equals(id) ? FRAGMENT : null;
 		}
 
 		return VERTEX_ID.equals(id) ? VERTEX : null;
-	};
+	});
 
 	private final Matrix4f fromScreen = new Matrix4f();
 	private final Matrix4f toPreviousClip = new Matrix4f();
@@ -288,13 +286,13 @@ final class MotionVectors {
 
 		try (RenderPass pass = encoder.createRenderPass(() -> LABEL, this.vectors.view(),
 				Optional.empty())) {
-			pass.setPipeline(compiled);
+			GraphicsApi.setPipeline(pass, compiled);
 			RenderSystem.bindDefaultUniforms(pass);
 			pass.setUniform(UNIFORM_BLOCK, this.block.currentBuffer());
 			pass.setVertexBuffer(0, quad.slice());
 			// NEAREST, because a filtered depth between two surfaces is a position on neither of
 			// them and the vector drawn from it points at nothing.
-			pass.bindTexture(SCENE, depth,
+			GraphicsApi.bindTexture(pass, SCENE, depth,
 					RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST));
 			pass.draw(VERTICES, 1, 0, 0);
 		}
@@ -398,7 +396,7 @@ final class MotionVectors {
 			this.pipeline = build();
 		}
 
-		if (device.precompilePipeline(this.pipeline, SOURCE).isValid()) {
+		if (GraphicsApi.valid(GraphicsApi.compile(device, this.pipeline, SOURCE))) {
 			return this.pipeline;
 		}
 
@@ -418,10 +416,7 @@ final class MotionVectors {
 				.withVertexShader(VERTEX_ID)
 				.withFragmentShader(FRAGMENT_ID)
 				.withBindGroupLayout(BindGroupLayouts.GLOBALS)
-				.withBindGroupLayout(BindGroupLayout.builder()
-						.withUniform(UNIFORM_BLOCK, UniformType.UNIFORM_BUFFER)
-						.withSampler(SCENE)
-						.build())
+				.withBindGroupLayout(GraphicsApi.blockAndSamplers(UNIFORM_BLOCK, SCENE))
 				.withVertexBinding(0, DefaultVertexFormat.POSITION_TEX)
 				.withColorTargetState(new ColorTargetState(Optional.empty(), FORMAT,
 						ColorTargetState.WRITE_ALL))

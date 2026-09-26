@@ -2,6 +2,7 @@ package dev.vitrail.screen;
 
 import dev.vitrail.ScreenText;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
@@ -13,7 +14,6 @@ import net.minecraft.network.chat.CommonComponents;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import org.jspecify.annotations.Nullable;
-import org.lwjgl.glfw.GLFW;
 
 import java.util.Optional;
 
@@ -242,10 +242,17 @@ public abstract class OptionWidget extends PageWidget {
 	 * Left walks forwards, right walks backwards, and shift with either gives the value the pack
 	 * ships. Iris answers both buttons here, which is why a right click is not the context menu it is
 	 * everywhere else on this screen.
+	 * <p>
+	 * The buttons are asked for by what they are rather than by number, because the number of the
+	 * right one is not the same in the two games: GLFW, under 26.2, counts it as the second button,
+	 * and SDL, under 26.3, counts the middle one second and the right one third. Asked for as a
+	 * second button, a right click would walk nowhere under 26.3 and a middle click would walk
+	 * backwards.
 	 */
 	@Override
 	public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
-		if (event.button() != GLFW.GLFW_MOUSE_BUTTON_1 && event.button() != GLFW.GLFW_MOUSE_BUTTON_2) {
+		if (event.button() != InputConstants.MOUSE_BUTTON_LEFT
+				&& event.button() != InputConstants.MOUSE_BUTTON_RIGHT) {
 			return super.mouseClicked(event, doubleClick);
 		}
 
@@ -255,7 +262,9 @@ public abstract class OptionWidget extends PageWidget {
 
 		boolean moved = Minecraft.getInstance().hasShiftDown() && originalValue();
 		if (!moved) {
-			moved = event.button() == GLFW.GLFW_MOUSE_BUTTON_1 ? nextValue() : previousValue();
+			moved = event.button() == InputConstants.MOUSE_BUTTON_LEFT
+					? nextValue()
+					: previousValue();
 		}
 
 		if (moved) {

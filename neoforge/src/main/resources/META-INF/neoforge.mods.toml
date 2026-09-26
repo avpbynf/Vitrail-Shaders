@@ -9,6 +9,9 @@ version = "${mod_version}"
 displayName = "Vitrail"
 displayURL = "https://github.com/avpbynf/Vitrail-Shaders"
 logoFile = "vitrail.png"
+# The same square image under the key current NeoForge reads, which it asks for beside logoFile: a
+# development client that finds logoFile alone stops on a warning screen before the title screen.
+iconFile = "vitrail.png"
 authors = "avpbynf"
 displayTest = "IGNORE_ALL_VERSION"
 description = '''OptiFine-format shader packs, on Minecraft's native Vulkan renderer'''
@@ -32,23 +35,30 @@ description = '''OptiFine-format shader packs, on Minecraft's native Vulkan rend
 [[mixins]]
 config = "vitrail.mixins.json"
 
-# The engine's own mixins are in the common module and are listed above. This second config is
-# the handful that exist on this loader alone, which today is the refusal of the early loading
-# window: it names classes of NeoForge's, so it could not live where the Fabric module reads.
+# The engine's mixins that differ between the games this jar can be built for. The common module
+# holds one file of this name per game, under src/mc<version>/, and a build takes the one for the
+# game it is built for, so this entry names whichever that was.
+[[mixins]]
+config = "vitrail-game.mixins.json"
+
+# The engine's own mixins are in the common module and are listed above. This last config is
+# the handful that exist on this loader alone, which on 26.2 is the refusal of the early loading
+# window and on 26.3 is nothing: it names classes of NeoForge's, so it could not live where the
+# Fabric module reads.
 [[mixins]]
 config = "vitrail-neoforge.mixins.json"
 
 [[dependencies.${mod_id}]]
 modId = "minecraft"
 type = "required"
-versionRange = "[${minecraft_version},26.3)"
+versionRange = "[${minecraft_version},${minecraft_next})"
 ordering = "NONE"
 side = "CLIENT"
 
 [[dependencies.${mod_id}]]
 modId = "neoforge"
 type = "required"
-versionRange = "[${neoforge_min_version},26.3)"
+versionRange = "[${neoforge_min_version},${minecraft_next})"
 ordering = "NONE"
 side = "CLIENT"
 

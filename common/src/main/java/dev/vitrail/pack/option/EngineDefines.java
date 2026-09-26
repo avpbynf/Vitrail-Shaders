@@ -142,7 +142,10 @@ public final class EngineDefines {
 		defines.put("IRIS_VERSION", Integer.toString(IRIS_VERSION));
 		defines.put("MC_GL_VERSION", "460");
 		defines.put("MC_GLSL_VERSION", "460");
-		defines.put(osSymbol(environment.os()), "");
+		String os = osSymbol(environment.os());
+		if (os != null) {
+			defines.put(os, "");
+		}
 		defines.put(vendorSymbol(environment.vendorName()), "");
 		defines.put(rendererSymbol(environment.rendererName()), "");
 		defines.put("MC_RENDER_QUALITY", "1.0");
@@ -308,9 +311,30 @@ public final class EngineDefines {
 		return defines;
 	}
 
+	/**
+	 * OptiFine's symbol for the system, or null on a Mac, where no system symbol is posed at all.
+	 * <p>
+	 * <strong>A divergence, and on purpose.</strong> OptiFine and Iris pose {@code MC_OS_MAC} on a
+	 * Mac (Iris at {@code gl/shader/StandardMacros.java:253-261}, the {@code OSX} case), and there
+	 * they run on Apple's OpenGL driver. That driver is what the symbol means to a
+	 * pack: every test of it in Complementary Reimagined r5.9.3 switches off something that driver
+	 * lacks. The pack turns off its coloured lighting and the image stores it is built on
+	 * ({@code lib/common.glsl:33}, {@code shaders.properties:72}), and paints a full screen error
+	 * over the picture where the player asked for it anyway ({@code program/final.glsl:24}). It
+	 * turns off the rain that needs a blend of its own per buffer
+	 * ({@code shaders.properties:149}), and drops samplers from {@code composite1} to stay under a
+	 * limit of eight ({@code program/composite1.glsl:23}).
+	 * <p>
+	 * None of those limits is this engine's. On a Mac it draws through MoltenVK on Metal, with
+	 * compute and storage images, a blend per attachment where the device says so (the
+	 * {@code bufferBlending} answer above), and a stage past sixteen samplers given an argument
+	 * buffer by {@code WideSamplerSets}. Posing the symbol would have a pack switch those off on a
+	 * machine that has them. Nothing is posed in its place: OptiFine's {@code MC_OS_UNKNOWN} would
+	 * say the system is not one it knows, which is not true either.
+	 */
 	private static String osSymbol(Os os) {
 		return switch (os) {
-			case MAC -> "MC_OS_MAC";
+			case MAC -> null;
 			case LINUX -> "MC_OS_LINUX";
 			case WINDOWS -> "MC_OS_WINDOWS";
 			case OTHER -> "MC_OS_UNKNOWN";

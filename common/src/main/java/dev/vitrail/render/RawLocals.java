@@ -131,7 +131,7 @@ public final class RawLocals {
 	 * {@code vitrail_sodium_pack_...}, and this engine's own {@code vitrail_...}), or the label
 	 * {@link PackCompute} gives a compute ({@code pack/<load>/...}).
 	 */
-	static boolean ours(String filename) {
+	public static boolean ours(String filename) {
 		return filename.startsWith(Vitrail.MOD_ID + "_") || filename.startsWith("pack/");
 	}
 

@@ -9,7 +9,6 @@ import dev.vitrail.Vitrail;
 import com.mojang.blaze3d.GpuFormat;
 import com.mojang.blaze3d.PrimitiveTopology;
 import com.mojang.blaze3d.buffers.GpuBuffer;
-import com.mojang.blaze3d.pipeline.BindGroupLayout;
 import com.mojang.blaze3d.pipeline.ColorTargetState;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.shaders.ShaderSource;
@@ -277,7 +276,7 @@ final class SceneSeed {
 		this.seed = seed;
 		this.extras = List.copyOf(extras);
 		this.emptyFragment = this.extras.isEmpty() ? null : emptyFragmentOf(this.extras);
-		this.source = (id, type) -> {
+		this.source = GraphicsApi.source((id, type) -> {
 			if (type == ShaderType.FRAGMENT) {
 				if (FRAGMENT_ID.equals(id)) {
 					return FRAGMENT;
@@ -287,19 +286,14 @@ final class SceneSeed {
 			}
 
 			return VERTEX_ID.equals(id) ? VERTEX : null;
-		};
+		});
 
 		this.pipeline = RenderPipeline.builder()
 				.withLocation(Identifier.fromNamespaceAndPath(Vitrail.MOD_ID, "pipeline/scene_seed"))
 				.withVertexShader(VERTEX_ID)
 				.withFragmentShader(FRAGMENT_ID)
 				.withBindGroupLayout(BindGroupLayouts.GLOBALS)
-				.withBindGroupLayout(BindGroupLayout.builder()
-						.withSampler(SAMPLER)
-						.withSampler(COVERAGE)
-						.withSampler(DEPTH)
-						.withSampler(DISTANT)
-						.build())
+				.withBindGroupLayout(GraphicsApi.samplers(SAMPLER, COVERAGE, DEPTH, DISTANT))
 				.withVertexBinding(0, DefaultVertexFormat.POSITION_TEX)
 				// The format of the target as the pack declared it, not the one of the main
 				// target: setting a pipeline whose colour state disagrees with the attachment
@@ -324,10 +318,7 @@ final class SceneSeed {
 				.withVertexShader(VERTEX_ID)
 				.withFragmentShader(EMPTY_FRAGMENT_ID)
 				.withBindGroupLayout(BindGroupLayouts.GLOBALS)
-				.withBindGroupLayout(BindGroupLayout.builder()
-						.withSampler(COVERAGE)
-						.withSampler(DEPTH)
-						.build())
+				.withBindGroupLayout(GraphicsApi.samplers(COVERAGE, DEPTH))
 				.withVertexBinding(0, DefaultVertexFormat.POSITION_TEX)
 				.withPrimitiveTopology(PrimitiveTopology.TRIANGLES)
 				.withCull(false);
@@ -401,7 +392,7 @@ final class SceneSeed {
 
 	/** Called every frame: a resource reload empties the pipeline cache. */
 	boolean prepare(GpuDevice device) {
-		if (!device.precompilePipeline(this.pipeline, this.source).isValid()) {
+		if (!GraphicsApi.valid(GraphicsApi.compile(device, this.pipeline, this.source))) {
 			if (!this.reported) {
 				this.reported = true;
 				Vitrail.logger().error("The scene seed did not compile, {} keeps its clear colour",
@@ -412,7 +403,7 @@ final class SceneSeed {
 		}
 
 		this.emptying = this.empties != null
-				&& device.precompilePipeline(this.empties, this.source).isValid();
+				&& GraphicsApi.valid(GraphicsApi.compile(device, this.empties, this.source));
 
 		// The scene still goes in when the second pass will not compile: half a repair is what the
 		// seed did before that pass existed and it is worth more than no picture at all. Said all
@@ -463,21 +454,21 @@ final class SceneSeed {
 		// Loaded rather than cleared: the clears have already run, and the draw no longer covers the
 		// target whole in any case.
 		try (RenderPass pass = encoder.createRenderPass(() -> LABEL, into, Optional.empty())) {
-			pass.setPipeline(this.pipeline);
+			GraphicsApi.setPipeline(pass, this.pipeline);
 			RenderSystem.bindDefaultUniforms(pass);
 			pass.setVertexBuffer(0, quad.slice());
-			pass.bindTexture(SAMPLER, scene,
+			GraphicsApi.bindTexture(pass, SAMPLER, scene,
 					RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST));
 			// NEAREST on both, and it matters more here than anywhere: the mask is the size of the
 			// screen, so a texel is a pixel and the answer is the one the geometry wrote, and the
 			// two depths are compared for having moved. Filtered, either read would move by a
 			// fraction of a texel along every silhouette in the picture, and the pack's own geometry
 			// would be repainted along all of them.
-			pass.bindTexture(COVERAGE, covered,
+			GraphicsApi.bindTexture(pass, COVERAGE, covered,
 					RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST));
-			pass.bindTexture(DEPTH, live,
+			GraphicsApi.bindTexture(pass, DEPTH, live,
 					RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST));
-			pass.bindTexture(DISTANT, distant,
+			GraphicsApi.bindTexture(pass, DISTANT, distant,
 					RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST));
 			pass.draw(VERTICES, 1, 0, 0);
 		}
@@ -496,7 +487,7 @@ final class SceneSeed {
 	 */
 	private boolean empty(CommandEncoder encoder, GpuBuffer quad, GpuTextureView covered,
 			GpuTextureView live, ColorTargets targets) {
-		RenderPassDescriptor descriptor = RenderPassDescriptor.create(() -> EMPTY_LABEL);
+		PassDescriptor descriptor = PassDescriptor.create(() -> EMPTY_LABEL);
 		int width = 0;
 		int height = 0;
 		for (Extra extra : this.extras) {
@@ -517,15 +508,15 @@ final class SceneSeed {
 
 		descriptor.withRenderArea(new RenderPass.RenderArea(0, 0, width, height));
 
-		try (RenderPass pass = encoder.createRenderPass(descriptor)) {
-			pass.setPipeline(this.empties);
+		try (RenderPass pass = encoder.createRenderPass(descriptor.build())) {
+			GraphicsApi.setPipeline(pass, this.empties);
 			RenderSystem.bindDefaultUniforms(pass);
 			pass.setVertexBuffer(0, quad.slice());
 			// NEAREST on both, and for the reason the draw above gives: a texel of the mask is a
 			// pixel, and the two depths are compared for having moved.
-			pass.bindTexture(COVERAGE, covered,
+			GraphicsApi.bindTexture(pass, COVERAGE, covered,
 					RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST));
-			pass.bindTexture(DEPTH, live,
+			GraphicsApi.bindTexture(pass, DEPTH, live,
 					RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST));
 			pass.draw(VERTICES, 1, 0, 0);
 		}

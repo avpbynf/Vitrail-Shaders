@@ -87,7 +87,7 @@ final class ParticleProgram extends FamilyProgram {
 
 		return new ParticleProgram(new GeometryProgram(new GeometryProgram.Pass(FAMILY,
 				element.element(), NAMESPACE, ANSWERED, false,
-				game.getColorTargetState().blendFunction(),
+				GraphicsApi.colorTarget(game).blendFunction(),
 				// The coverage mask on the opaque half and not on the translucent one, which is the
 				// entities' rule and is what decides whether the pack owns draw buffer nought.
 				//

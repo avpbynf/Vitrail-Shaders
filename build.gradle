@@ -129,6 +129,92 @@ subprojects {
 		}
 	}
 
+	// Sources that differ between two games. src/main/ holds what every supported game compiles,
+	// written against the names of the oldest one, and src/mc<version>/ beside it holds what only
+	// that game compiles. The second is ADDED to the module rather than laid over the first, so a
+	// class is either shared or belongs to one game, never both: a reader who opens a shared file
+	// is reading what every jar runs, and a difference between two games is always a whole file
+	// under a directory that says which game it is for.
+	def minecraft = project.minecraft_version
+	def versionSources = "src/mc${minecraft}"
+
+	// Each game builds into a directory of its own, so that asking for the other one does not throw
+	// away every output of this one: the two compile against different games, and a module switched
+	// back and forth in one directory would recompile from nothing on every switch.
+	layout.buildDirectory = layout.projectDirectory.dir("build/mc${minecraft}")
+
+	sourceSets.main.java.srcDir("${versionSources}/java")
+	sourceSets.main.resources.srcDir("${versionSources}/resources")
+
+	// A game that moved classes the shared sources name is given those sources with the names
+	// rewritten, rather than a copy of them kept by hand. versions/<version>.remap lists the moves,
+	// one class per line, and the rewrite is applied line by line to a copy under build/, so a
+	// compiler error on the copy is on the same line as in the file it came from. It reaches the
+	// dotted name in code and in strings and the slashed one in descriptors, which is how a mixin
+	// target names a class; a name is only ever matched whole, so a class whose name another one
+	// begins with is not rewritten by the shorter entry.
+	def remapFile = rootProject.file("versions/${minecraft}.remap")
+
+	if (remapFile.isFile()) {
+		def moves = [:]
+
+		remapFile.eachLine("UTF-8") { line ->
+			def text = line.trim()
+			if (text.isEmpty() || text.startsWith("#")) {
+				return
+			}
+
+			def names = text.split(/\s+/)
+			if (names.length != 2) {
+				throw new GradleException("${remapFile.name}: '${text}' is not a class and where it "
+						+ "moved to")
+			}
+
+			moves[names[0]] = names[1]
+			moves[names[0].replace(".", "/")] = names[1].replace(".", "/")
+			// A descriptor spells the class after an L, which the match below would otherwise read
+			// as the end of a longer name and leave alone.
+			moves["L" + names[0].replace(".", "/")] = "L" + names[1].replace(".", "/")
+		}
+
+		// Longest first, so the alternation tries a name before any name it begins with. A name is
+		// matched whole: not after a letter, not before one. The descriptor spelling is the one
+		// exception on its left, since a descriptor packs its types together, (ILcom/...;) giving
+		// the name an I in front, and what closes it on the right, a semicolon or a nested class,
+		// is what says it is a descriptor.
+		def quoted = { names -> names.sort { -it.length() }
+				.collect { java.util.regex.Pattern.quote(it) }.join("|") }
+		def pattern = java.util.regex.Pattern.compile(
+				'(?:' + quoted(moves.keySet().findAll { it.startsWith("L") }) + ')(?=[;$<])'
+				+ '|(?<![\\w$])(?:' + quoted(moves.keySet().findAll { !it.startsWith("L") })
+				+ ')(?!\\w)')
+
+		def remapSources = tasks.register("remapSources", Sync) {
+			description = "Rewrites the shared sources onto the class names of Minecraft ${minecraft}."
+
+			// The table as rewritten, and not only the file it came from: a change to how a line of
+			// that file becomes a rewrite would otherwise leave every copy under build/ standing.
+			inputs.property("moves", moves)
+			from("src/main/java")
+			into(layout.buildDirectory.dir("generated/sources/remapped/java"))
+			filteringCharset = "UTF-8"
+			filter { String line ->
+				def matcher = pattern.matcher(line)
+				def rewritten = new StringBuilder()
+
+				while (matcher.find()) {
+					matcher.appendReplacement(rewritten,
+							java.util.regex.Matcher.quoteReplacement(moves[matcher.group()]))
+				}
+
+				matcher.appendTail(rewritten)
+				rewritten.toString()
+			}
+		}
+
+		sourceSets.main.java.srcDirs = [remapSources, "${versionSources}/java"]
+	}
+
 	// A warning nobody is required to fix is a warning nobody reads, so what is kept here is what
 	// is wrong rather than what is merely unfashionable, and it fails the build. Four are left out
 	// on purpose, and the test each one passes is the same: its findings cannot be about this code.
@@ -267,6 +353,7 @@ tasks.register("checkText") {
 	def texts = fileTree(rootDir) {
 		include "*.md", "*.gradle", "*.properties", ".gitattributes", ".gitignore"
 		include "common/src/**", "neoforge/src/**", "fabric/src/**", ".github/**", ".githooks/**"
+		include "versions/**"
 		// docs/ is prose rather than code, which is exactly why it needs this: a curly quote
 		// pasted from a browser is invisible in a diff and reaches the published page.
 		include "docs/**"

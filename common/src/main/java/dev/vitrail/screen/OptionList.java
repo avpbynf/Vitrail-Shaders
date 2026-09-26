@@ -467,7 +467,7 @@ public final class OptionList extends WidgetList<OptionList.BaseEntry> {
 		 * Iris's own finding and the reason it says so rather than opening one.
 		 */
 		private boolean canOpenDialog() {
-			if (!Minecraft.getInstance().getWindow().isFullscreen()) {
+			if (!Desktop.fullscreen()) {
 				return true;
 			}
 

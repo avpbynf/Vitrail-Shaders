@@ -4,6 +4,7 @@ import dev.vitrail.pack.load.PackLoader;
 import dev.vitrail.ScreenText;
 import dev.vitrail.Vitrail;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.ComponentPath;
@@ -22,10 +23,10 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.Identifier;
 import net.minecraft.util.ARGB;
-import net.minecraft.util.Util;
 import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
+import java.net.URI;
 import java.nio.file.FileSystems;
 import java.nio.file.Path;
 import java.nio.file.StandardWatchEventKinds;
@@ -80,9 +81,9 @@ public final class PackList extends AbstractSelectionList<PackList.BaseEntry> {
 	 * the packs whose author has uploaded a file tagged for it, which is close to none of them in the
 	 * weeks after a game release, exactly when somebody arrives here with an empty folder.
 	 */
-	private static final String CURSEFORGE_PACKS =
-			"https://www.curseforge.com/minecraft/search?class=shaders";
-	private static final String MODRINTH_PACKS = "https://modrinth.com/shaders";
+	private static final URI CURSEFORGE_PACKS =
+			URI.create("https://www.curseforge.com/minecraft/search?class=shaders");
+	private static final URI MODRINTH_PACKS = URI.create("https://modrinth.com/shaders");
 
 	private static final int ROW_HEIGHT = 20;
 
@@ -347,16 +348,14 @@ public final class PackList extends AbstractSelectionList<PackList.BaseEntry> {
 	 * Somewhere to get a pack, through the game's own "do you want to open this link" screen so that
 	 * nothing is opened without being asked for and the address is shown before it is followed. Iris
 	 * offers Modrinth's from the same place.
+	 * <p>
+	 * The game's own helper does the whole of it: it puts the screen up, opens the address when the
+	 * player says yes, and comes back to this screen either way. It is also the one way of opening an
+	 * address that both games offer under the same name, since the call that opens one moved from
+	 * {@code Util.getPlatform()} to {@code Blaze3D} in 26.3 and each game's helper calls its own.
 	 */
-	private void openPackSite(String address) {
-		Screen here = this.minecraft.gui.screen();
-		this.minecraft.gui.setScreen(new ConfirmLinkScreen(followed -> {
-			if (followed) {
-				Util.getPlatform().openUri(address);
-			}
-
-			this.minecraft.gui.setScreen(here);
-		}, address, true));
+	private void openPackSite(URI address) {
+		ConfirmLinkScreen.confirmLinkNow(this.minecraft.gui.screen(), address, true);
 	}
 
 	/** Every row of this list, whatever it draws. */
@@ -604,7 +603,7 @@ public final class PackList extends AbstractSelectionList<PackList.BaseEntry> {
 
 		@Override
 		public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
-			return event.button() == 0 && press();
+			return event.button() == InputConstants.MOUSE_BUTTON_LEFT && press();
 		}
 
 		@Override

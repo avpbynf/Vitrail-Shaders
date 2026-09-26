@@ -4,6 +4,7 @@ import dev.vitrail.cache.ModuleCache;
 import dev.vitrail.glsl.TranslationCache;
 import dev.vitrail.HostReport;
 import dev.vitrail.render.EntityDraw;
+import dev.vitrail.render.GraphicsApi;
 import dev.vitrail.render.HandDraw;
 import dev.vitrail.render.PackChain;
 import dev.vitrail.render.PackChoice;
@@ -247,6 +248,11 @@ public final class EngineStages {
 		// world's translucents or, once the level returns, the screen.
 		EntityDraw.opaqueFeatures(false);
 
+		// On a game that draws the whole level through one pass, that pass ends here, before
+		// anything below records work a pass may not hold, a compute among them; the level's next
+		// draw opens it again. On a game that opens a pass per phase this does nothing.
+		GraphicsApi.suspendLevelPass();
+
 		// Then the far terrain's depth, taken into the pack's window before its water half is drawn
 		// and before the deferred stage below reads it: this boundary is where Iris takes its own
 		// copy without the translucent LODs. PackChain.takeDistantDepth says what the frames
@@ -284,6 +290,7 @@ public final class EngineStages {
 		// First, and before the layer is composed: closing the window closes any pass a group left
 		// open, and composing opens one of its own where the encoder allows only one at a time.
 		EntityDraw.translucentFeatures(false);
+		GraphicsApi.suspendLevelPass();
 		PackChain.closeFeatures();
 		// Then the copy a translucent program reads where it samples a target it writes, which
 		// has to hold the layer just composed and everything before it.

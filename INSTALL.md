@@ -17,14 +17,15 @@ is. Building it yourself gives the same thing for whatever commit you are on, an
 
 | Component | Version |
 | --- | --- |
-| Minecraft | 26.2 |
-| NeoForge | 26.2.0.32-beta or later in the 26.2 line |
+| Minecraft | 26.2 or 26.3, a jar for each |
+| NeoForge | 26.2.0.32-beta or later in the 26.2 line, 26.3.0.16-beta or later in the 26.3 line |
 | or Fabric Loader | 0.19.3 or later, with Fabric API |
-| Sodium | 0.9.x, the build for whichever loader is in front |
+| Sodium | 0.9.x, the build for the game and the loader in front |
 | Java | 25, to build (the game brings its own runtime) |
 
 One jar for both loaders: each loader reads its own metadata out of it and
-ignores the rest. On Fabric, two modules of Fabric API are declared as
+ignores the rest. The game is the one thing a jar is built for, and its name says
+which, `+mc26.2` or `+mc26.3`; a jar refuses to load under the other game. On Fabric, two modules of Fabric API are declared as
 required, and they are the whole of what this mod takes from it: the key
 mapping and the client tick, which is what the settings screen is opened by.
 Nothing of the world's rendering goes through Fabric API.
@@ -35,8 +36,8 @@ engine needs from it.
 
 ## Installing into an instance
 
-Copy the jar into the `mods` folder of a NeoForge or Fabric 26.2 instance, next
-to Sodium. For a CurseForge instance that is:
+Copy the jar built for your game into the `mods` folder of a NeoForge or Fabric
+instance of that game, next to Sodium. For a CurseForge instance that is:
 
 ```
 <instances>/<instance name>/mods/
@@ -117,7 +118,7 @@ its versions, which is why none of them is described here as on or off: with
 Chloride installed, Vitrail reads that file at startup and names in the log each
 one that is on, with what it costs and what to set it to.
 
-**Distant Horizons** works, and which build depends on the loader. On Fabric,
+**Distant Horizons** works on 26.2, and which build depends on the loader. On Fabric,
 3.2.0-b installs from the launcher like any other mod. On NeoForge that same build
 unwraps a GPU texture into an OpenGL handle as the lightmap renders, its NeoForge
 wrapper alone doing so, and dies on the first frame of a world with a

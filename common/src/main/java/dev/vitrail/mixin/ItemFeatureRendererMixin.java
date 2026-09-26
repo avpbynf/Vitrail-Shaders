@@ -3,6 +3,7 @@ package dev.vitrail.mixin;
 import dev.vitrail.render.EntityIdentifiers;
 import dev.vitrail.render.SubmittedIdentifiers;
 
+import com.llamalad7.mixinextras.sugar.Local;
 import net.minecraft.client.renderer.feature.ItemFeatureRenderer;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -23,14 +24,13 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public abstract class ItemFeatureRendererMixin {
 
 	@Inject(method = "prepareSubmit", at = @At("HEAD"), require = 1)
-	private void vitrail$begin(ItemFeatureRenderer.Submit submit, boolean foil,
-			CallbackInfo callback) {
+	private void vitrail$begin(CallbackInfo callback,
+			@Local(argsOnly = true) ItemFeatureRenderer.Submit submit) {
 		EntityIdentifiers.restore(((SubmittedIdentifiers) (Object) submit).vitrail$identifiers());
 	}
 
 	@Inject(method = "prepareSubmit", at = @At("RETURN"), require = 1)
-	private void vitrail$end(ItemFeatureRenderer.Submit submit, boolean foil,
-			CallbackInfo callback) {
+	private void vitrail$end(CallbackInfo callback) {
 		EntityIdentifiers.clear();
 	}
 }

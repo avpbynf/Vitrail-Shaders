@@ -10,6 +10,31 @@ pluginManagement {
 
 rootProject.name = "vitrail"
 
+// The game this build is for. One source tree builds a jar for each game version it supports, one
+// version per invocation: the default is in gradle.properties and `-Pminecraft=<version>` picks
+// another. What follows the game is read out of versions/<version>.properties and handed to every
+// project before its build script runs, so a module reads `project.neoform_version` the same way
+// whichever game was asked for.
+def minecraft = providers.gradleProperty("minecraft").get()
+def versionFile = file("versions/${minecraft}.properties")
+
+if (!versionFile.isFile()) {
+	def known = file("versions").list().findAll { it.endsWith(".properties") }
+			.collect { it - ".properties" }.sort()
+	throw new GradleException("There is no versions/${minecraft}.properties, so Minecraft "
+			+ "${minecraft} is not a game this tree builds for. It builds for ${known.join(', ')}.")
+}
+
+def versionProperties = new Properties()
+versionFile.withReader("UTF-8") { versionProperties.load(it) }
+versionProperties.setProperty("minecraft_version", minecraft)
+
+gradle.beforeProject { project ->
+	versionProperties.each { key, value ->
+		project.ext.set((String) key, value)
+	}
+}
+
 include("common")
 include("neoforge")
 include("fabric")

@@ -1,7 +1,6 @@
 package dev.vitrail.render;
 
 import dev.vitrail.cache.ModuleCache;
-import dev.vitrail.glsl.LoadClock;
 import dev.vitrail.glsl.PackProgram;
 import dev.vitrail.glsl.SharedMemory;
 import dev.vitrail.glsl.TranslatedUnit;
@@ -35,14 +34,12 @@ import com.mojang.blaze3d.systems.GpuDeviceBackend;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.textures.FilterMode;
 import com.mojang.blaze3d.textures.GpuTextureView;
-import com.mojang.blaze3d.vulkan.VulkanBindGroupLayout;
 import com.mojang.blaze3d.vulkan.VulkanCommandEncoder;
 import com.mojang.blaze3d.vulkan.VulkanDevice;
 import com.mojang.blaze3d.vulkan.VulkanGpuBuffer;
 import com.mojang.blaze3d.vulkan.VulkanGpuSampler;
 import com.mojang.blaze3d.vulkan.VulkanGpuTextureView;
 import com.mojang.blaze3d.vulkan.VulkanUtils;
-import com.mojang.blaze3d.vulkan.glsl.IntermediaryShaderModule;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.MappableRingBuffer;
 import org.lwjgl.PointerBuffer;
@@ -750,7 +747,7 @@ final class PackCompute implements AutoCloseable {
 		private boolean allocatedSets;
 		private long pipelineLayout;
 		private long pipeline;
-		private List<VulkanBindGroupLayout.Entry> entries = List.of();
+		private List<ComputeShader.Binding> entries = List.of();
 		private boolean compiled;
 
 		/**
@@ -820,80 +817,34 @@ final class PackCompute implements AutoCloseable {
 				return;
 			}
 
-			// Clocked as module work like everything the game's compiler makes: shaderc first,
-			// then the reflection inside createFromSpirv. Neither goes through the game's
-			// compiler, so the funnel clock cannot see them and this road counts itself. A cache
-			// hit skips both and still clocks the file read, the same way GlslCompilerMixin
-			// clocks a served graphics unit. The layout and the pipeline below stay outside the
-			// figure: they are Vulkan object creation, not module work. One outer finally so that
-			// every exit, the refusal and the throw included, is counted exactly once.
-			//
-			// Iris has no disk store for this. ProgramBuilder.beginCompute
-			// (ProgramBuilder.java:71-84) then GlShader (GlShader.java:24-49) calls
-			// glCompileShader on the render thread, and the binary cache is the OpenGL driver's
-			// (Iris.java:133-136 asks that driver for ten parallel compile threads). This engine's
-			// compute never entered GlslCompiler.createIntermediary, so it never entered
-			// ModuleCache either; the same store now holds it, same file layout, a stage token
-			// that names our shaderc options so a graphics COMPUTE through the game's compiler
-			// cannot serve this blob.
-			long began = System.nanoTime();
-			IntermediaryShaderModule module = null;
-			// One state for the key and the patch, as the game's compiler road takes it.
-			RawLocals.begin();
+			// ComputeShader builds the module, through the disk store and with the zeroes the game's
+			// compiler road gets, and clocks what that cost: the steps differ between the two games
+			// the tree builds for, and the layout and the pipeline below do not.
+			ComputeShader.Compiled compiled;
 			try {
-				String source = sharedMemory(unit.text());
-				String key = ModuleCache.keyOf(source, MODULE_CACHE_STAGE);
-				module = ModuleCache.lookup(key, this.label);
-				ByteBuffer spirv = null;
-				if (module == null) {
-					spirv = compileSpirv(source);
-					if (spirv == null) {
-						ModuleCache.building(this.label);
-						return;
-					}
+				compiled = ComputeShader.build(vulkan, this.label, sharedMemory(unit.text()),
+						MODULE_CACHE_STAGE, Pass::compileSpirv);
+			} catch (GpuDeviceLossException e) {
+				throw e;
+			} catch (Exception e) {
+				Vitrail.logger().warn("compute {} SPIR-V failed: {}", this.path, e.toString());
+				return;
+			}
 
-					ModuleCache.building(this.label);
-				}
+			if (compiled == null) {
+				return;
+			}
 
-				try {
-					if (module == null) {
-						// The same zeroes the game's compiler road gets in GlslCompilerMixin: this
-						// road has its own shaderc call, so it has to ask for them itself, and
-						// before the reflection and the store, so a served blob carries them too.
-						// Compiled at the performance level, this module has mostly values where
-						// that road has variables, and its undefined reads are what the pass turns
-						// into zeroes here.
-						module = IntermediaryShaderModule.createFromSpirv(this.label,
-								RawLocals.patch(this.label, spirv));
-						ModuleCache.store(key, module);
-					}
-
-					ComputeShader.Compiled compiled = ComputeShader.compile(vulkan, module);
-					this.shaderModule = compiled.module();
-					this.entries = compiled.entries();
-					// Named and still dispatched, which is what the graphics path does with the
-					// same ceiling: a device is only obliged to allow this many descriptors in one
-					// pushed set, and going past it is undefined rather than slow. Said here, once,
-					// so that a driver error later has a line in the log that predicted it.
-					if (this.entries.size() > PUSH_DESCRIPTORS) {
-						Vitrail.logger().warn("compute {} pushes {} descriptors in one set, "
-								+ "past the {} a device commonly allows at once", this.path,
-								this.entries.size(), PUSH_DESCRIPTORS);
-					}
-				} catch (GpuDeviceLossException e) {
-					throw e;
-				} catch (Exception e) {
-					Vitrail.logger().warn("compute {} SPIR-V failed: {}", this.path,
-							e.toString());
-					return;
-				}
-			} finally {
-				RawLocals.end();
-				if (module != null) {
-					module.close();
-				}
-
-				LoadClock.module(System.nanoTime() - began);
+			this.shaderModule = compiled.module();
+			this.entries = compiled.entries();
+			// Named and still dispatched, which is what the graphics path does with the same
+			// ceiling: a device is only obliged to allow this many descriptors in one pushed set,
+			// and going past it is undefined rather than slow. Said here, once, so that a driver
+			// error later has a line in the log that predicted it.
+			if (this.entries.size() > PUSH_DESCRIPTORS) {
+				Vitrail.logger().warn("compute {} pushes {} descriptors in one set, "
+						+ "past the {} a device commonly allows at once", this.path,
+						this.entries.size(), PUSH_DESCRIPTORS);
 			}
 
 			try (MemoryStack stack = MemoryStack.stackPush()) {
@@ -1085,12 +1036,12 @@ final class PackCompute implements AutoCloseable {
 			VkDescriptorSetLayoutBinding.Buffer bindings =
 					VkDescriptorSetLayoutBinding.calloc(this.entries.isEmpty() ? 0 : count, stack);
 			for (int i = 0; i < this.entries.size(); i++) {
-				VulkanBindGroupLayout.Entry entry = this.entries.get(i);
+				ComputeShader.Binding entry = this.entries.get(i);
 				boolean storage = CustomImages.storage(entry.name())
 						|| StorageImages.storageBinding(entry.name())
 						|| COLOUR_IMAGE.matcher(entry.name()).matches();
 				int type;
-				if (entry.type() == VulkanBindGroupLayout.VulkanBindGroupEntryType.UNIFORM_BUFFER) {
+				if (entry.buffer()) {
 					type = StorageBuffers.named(entry.name()) || servesShared(entry.name())
 							? VK12.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER
 							: VK12.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -1167,12 +1118,12 @@ final class PackCompute implements AutoCloseable {
 
 			VkWriteDescriptorSet.Buffer writes = VkWriteDescriptorSet.calloc(this.entries.size(), stack);
 			for (int i = 0; i < this.entries.size(); i++) {
-				VulkanBindGroupLayout.Entry entry = this.entries.get(i);
+				ComputeShader.Binding entry = this.entries.get(i);
 				VkWriteDescriptorSet write = writes.get(i).sType$Default();
 				write.dstBinding(i);
 				write.dstArrayElement(0);
 				write.descriptorCount(1);
-				if (entry.type() == VulkanBindGroupLayout.VulkanBindGroupEntryType.UNIFORM_BUFFER) {
+				if (entry.buffer()) {
 					if (servesShared(entry.name())) {
 						VkDescriptorBufferInfo.Buffer bufferInfo = VkDescriptorBufferInfo.calloc(1, stack);
 						bufferInfo.buffer(this.sharedBuffer);
@@ -1223,7 +1174,7 @@ final class PackCompute implements AutoCloseable {
 						: null;
 				if (supplied != null && supplied.view() instanceof VulkanGpuTextureView served) {
 					imageInfo.sampler(((VulkanGpuSampler) PackPass.sampler(supplied.repeat(),
-							supplied.filter(), false)).vkSampler());
+							supplied.filter(), supplied.mipmaps())).vkSampler());
 					imageInfo.imageView(served.vkImageView());
 					imageInfo.imageLayout(VK12.VK_IMAGE_LAYOUT_GENERAL);
 					write.descriptorType(VK12.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
@@ -1313,7 +1264,7 @@ final class PackCompute implements AutoCloseable {
 						ColorTargets.PackBinding laid = targets.packTexture(this.textureStage, screen);
 						if (laid != null && laid.view() instanceof VulkanGpuTextureView served) {
 							imageInfo.sampler(((VulkanGpuSampler) PackPass.sampler(laid.repeat(),
-									laid.filter(), false)).vkSampler());
+									laid.filter(), laid.mipmaps())).vkSampler());
 							imageInfo.imageView(served.vkImageView());
 							imageInfo.imageLayout(VK12.VK_IMAGE_LAYOUT_GENERAL);
 							write.descriptorType(VK12.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);

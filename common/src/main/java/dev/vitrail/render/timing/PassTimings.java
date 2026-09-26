@@ -63,8 +63,13 @@ public final class PassTimings {
 	 * Passes one frame can record. A pack whose chain is long and whose mip chains are deep sits
 	 * around a hundred with the game's own passes counted; this leaves room for a frame that is not
 	 * typical without sizing the pool for one that cannot happen.
+	 * <p>
+	 * <strong>And no more, because of Apple hardware.</strong> MoltenVK backs a timestamp pool with
+	 * one Metal counter sample buffer, which holds 32 KiB and so 4096 timestamps at most; a pool
+	 * past that is refused there, and MoltenVK falls back to emulated timestamps that read nought
+	 * for every pass. This times the slots below is exactly 4096.
 	 */
-	private static final int PASSES_PER_FRAME = 512;
+	private static final int PASSES_PER_FRAME = 256;
 
 	private static final int QUERIES_PER_FRAME = PASSES_PER_FRAME * 2;
 

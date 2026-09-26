@@ -1,0 +1,24 @@
+{
+	"required": true,
+	"minVersion": "0.8.5",
+	"package": "dev.vitrail.mixin.game",
+	"compatibilityLevel": "JAVA_21",
+	"injectors": {
+		"defaultRequire": 1
+	},
+	"client": [
+		"FirstPersonHandsAndItemsRendererMixin",
+		"GameRendererHandMixin",
+		"GameRendererTransparencyMixin",
+		"LevelRendererFeaturesMixin",
+		"LevelRendererMainPassMixin",
+		"PipelineBuilderMixin",
+		"PipelineCacheAccessor",
+		"RenderPipelinesAccessor",
+		"RenderSystemAccessor",
+		"RenderSystemMixin",
+		"SkyRendererMixin",
+		"SPIRVModuleMixin",
+		"VulkanRenderPipelineAccessor"
+	]
+}

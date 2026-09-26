@@ -9,7 +9,6 @@ import com.mojang.blaze3d.GpuDeviceLossException;
 import com.mojang.blaze3d.GpuFormat;
 import com.mojang.blaze3d.PrimitiveTopology;
 import com.mojang.blaze3d.buffers.GpuBuffer;
-import com.mojang.blaze3d.pipeline.BindGroupLayout;
 import com.mojang.blaze3d.pipeline.ColorTargetState;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.pipeline.RenderTarget;
@@ -326,7 +325,7 @@ public final class RenderScale {
 			}
 			""";
 
-	private static final ShaderSource SOURCE = (id, type) -> {
+	private static final ShaderSource SOURCE = GraphicsApi.source((id, type) -> {
 		if (type == ShaderType.FRAGMENT) {
 			if (UPSCALE_ID.equals(id)) {
 				return UPSCALE;
@@ -340,7 +339,7 @@ public final class RenderScale {
 		}
 
 		return VERTEX_ID.equals(id) ? VERTEX : null;
-	};
+	});
 
 	/**
 	 * One of the three pipelines, with the latch a refusal raises. The compiled form lives in the
@@ -368,7 +367,7 @@ public final class RenderScale {
 			}
 
 			try {
-				if (device.precompilePipeline(this.pipeline, SOURCE).isValid()) {
+				if (GraphicsApi.valid(GraphicsApi.compile(device, this.pipeline, SOURCE))) {
 					return this.pipeline;
 				}
 
@@ -710,7 +709,7 @@ public final class RenderScale {
 
 		try {
 			if (scaled == null) {
-				scaled = new TextureTarget("Vitrail scaled world", width, height, true, FORMAT);
+				scaled = GraphicsApi.textureTarget("Vitrail scaled world", width, height, true, FORMAT);
 				announce(width, height, outWidth, outHeight);
 			} else if (scaled.width != width || scaled.height != height) {
 				scaled.resize(width, height);
@@ -793,10 +792,10 @@ public final class RenderScale {
 	private static void draw(CommandEncoder encoder, GpuDevice device, RenderPipeline pipeline,
 			GpuTextureView from, GpuTextureView into, FilterMode filter, String label) {
 		try (RenderPass pass = encoder.createRenderPass(() -> label, into, Optional.empty())) {
-			pass.setPipeline(pipeline);
+			GraphicsApi.setPipeline(pass, pipeline);
 			RenderSystem.bindDefaultUniforms(pass);
 			pass.setVertexBuffer(0, quad(device).slice());
-			pass.bindTexture(SAMPLER, from,
+			GraphicsApi.bindTexture(pass, SAMPLER, from,
 					RenderSystem.getSamplerCache().getClampToEdge(filter));
 			pass.draw(VERTICES, 1, 0, 0);
 		}
@@ -809,7 +808,7 @@ public final class RenderScale {
 				.withVertexShader(VERTEX_ID)
 				.withFragmentShader(fragment)
 				.withBindGroupLayout(BindGroupLayouts.GLOBALS)
-				.withBindGroupLayout(BindGroupLayout.builder().withSampler(SAMPLER).build())
+				.withBindGroupLayout(GraphicsApi.samplers(SAMPLER))
 				.withVertexBinding(0, DefaultVertexFormat.POSITION_TEX)
 				.withColorTargetState(new ColorTargetState(Optional.empty(), FORMAT,
 						ColorTargetState.WRITE_ALL))
