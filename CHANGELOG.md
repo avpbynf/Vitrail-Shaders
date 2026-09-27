@@ -26,6 +26,10 @@ what the next one holds.
   while a pack draws, as Iris turns it off on the other backend and as on 26.2. One thing is not carried over yet: a program with a geometry stage is
   served only where that stage passes each corner on, which is folded into the stage after it, as on
   a Mac on either game, and any other such program is set aside with a line in the log.
+- **The compiling notice in the top-left corner can be turned off.** A Compile Notice switch on
+  Vitrail's page of the video settings hides the pulsing mark and its "Compiling shaders..." words.
+  It is on by default, the pack compiles exactly as before either way, and the F3 screen still
+  says when it is compiling.
 
 ### Fixed
 

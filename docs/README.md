@@ -67,7 +67,8 @@ observe:
   shaders..." beside it. The leftover families then compile in the background while you play,
   the mark still pulsing, and a first draw that outruns that work compiles on the spot. When
   everything is in, the mark stands still, says so, and the corner fades back to the game. The
-  same wait comes back for a moment after every resource reload.
+  same wait comes back for a moment after every resource reload. The Compile Notice switch on
+  Vitrail's page of the video settings hides that corner; the wait itself does not change.
 - **A pack that cannot be translated fails loudly**, not as a corrupt image twenty minutes later.
   When Vitrail refuses something, the log names it.
 - **Uniform and sampler binding is decided up front**, so a pack that asks for something the

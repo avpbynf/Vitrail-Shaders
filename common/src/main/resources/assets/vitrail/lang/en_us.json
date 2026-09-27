@@ -22,6 +22,8 @@
 	"options.vitrail.shadow_amortisation_frames": "%s frames",
 	"options.vitrail.module_cache_ceiling": "Cache Cap",
 	"options.vitrail.module_cache_ceiling_tooltip": "How much compiled-shader disk this engine may keep.\n\"512 MiB\" is what it ships. Lower drops unused units sooner.\nApplies at once. No pack reload.",
+	"options.vitrail.compile_card": "Compile Notice",
+	"options.vitrail.compile_card_tooltip": "Shows the Vitrail mark and \"Compiling shaders...\" in the top-left corner while a pack compiles.\nOff hides the corner. The F3 screen still says it.\nApplies at once.",
 	"pack.vitrail.select_title": "Select",
 	"pack.vitrail.configure_title": "Configure",
 	"options.vitrail.title": "Shader Pack Settings",

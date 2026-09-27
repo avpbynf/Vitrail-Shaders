@@ -22,6 +22,8 @@
 	"options.vitrail.shadow_amortisation_frames": "%s frames",
 	"options.vitrail.module_cache_ceiling": "Plafond du cache",
 	"options.vitrail.module_cache_ceiling_tooltip": "Combien de shaders compilés ce moteur peut garder sur le disque.\n\"512 MiB\" est ce qu'il livre. Plus bas, les unités inutiles partent plus tôt.\nS'applique tout de suite. Pas de rechargement du pack.",
+	"options.vitrail.compile_card": "Avis de compilation",
+	"options.vitrail.compile_card_tooltip": "Affiche la marque Vitrail et \"Compilation des shaders...\" en haut à gauche pendant qu'un pack compile.\nDésactivé, le coin reste vide. L'écran F3 le dit toujours.\nS'applique tout de suite.",
 	"pack.vitrail.select_title": "Sélectionner",
 	"pack.vitrail.configure_title": "Configurer",
 	"options.vitrail.title": "Réglages du pack",

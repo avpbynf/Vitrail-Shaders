@@ -8,6 +8,7 @@ import dev.vitrail.render.ShadowAmortisation;
 import dev.vitrail.render.StartupGuard;
 import dev.vitrail.render.TemporalAccumulation;
 import dev.vitrail.render.TerrainDraw;
+import dev.vitrail.screen.CompileCard;
 import dev.vitrail.screen.PackScreens;
 import dev.vitrail.ScreenText;
 import dev.vitrail.settings.GraphicsApiChoice;
@@ -102,6 +103,10 @@ public final class ConfigEntry implements ConfigEntryPoint {
 	private static final Identifier TEMPORAL_FOLD =
 			Identifier.fromNamespaceAndPath(Vitrail.MOD_ID, "temporal_fold");
 
+	/** Whether the compiling corner shows, last on the engine page since it draws nothing. */
+	private static final Identifier COMPILE_CARD =
+			Identifier.fromNamespaceAndPath(Vitrail.MOD_ID, "compile_card");
+
 	/** What the selector offers while the pack draws the world, and what it offers otherwise. */
 	private static final Set<TextureFilteringMethod> WITHOUT_RGSS =
 			Set.of(TextureFilteringMethod.NONE, TextureFilteringMethod.ANISOTROPIC);
@@ -134,7 +139,8 @@ public final class ConfigEntry implements ConfigEntryPoint {
 							.addOption(temporalFold(builder))
 							.addOption(shadowAmortisation(builder))
 							.addOption(graphicsApi(builder))
-							.addOption(moduleCacheCeiling(builder))));
+							.addOption(moduleCacheCeiling(builder))
+							.addOption(compileCard(builder))));
 		}
 
 		// Only on the backend this engine draws on. Anywhere else the pack draws nothing, so RGSS
@@ -353,6 +359,20 @@ public final class ConfigEntry implements ConfigEntryPoint {
 				.setValueFormatter(mib -> Component.literal(mib + " MiB"))
 				.setStorageHandler(() -> {})
 				.setImpact(OptionImpact.LOW);
+	}
+
+	/**
+	 * Whether the mark and its words show in the top-left corner while a pack compiles. Hiding it
+	 * changes nothing of the load itself, and the F3 line keeps saying the same words. No impact
+	 * is declared, the corner costing the frame nothing worth a label.
+	 */
+	private static OptionBuilder compileCard(ConfigBuilder builder) {
+		return builder.createBooleanOption(COMPILE_CARD)
+				.setName(Component.translatable(ScreenText.COMPILE_CARD))
+				.setTooltip(_ -> Component.translatable(ScreenText.COMPILE_CARD_TOOLTIP))
+				.setDefaultValue(CompileCard.DEFAULT_WANTED)
+				.setBinding(CompileCard::setWanted, CompileCard::wanted)
+				.setStorageHandler(() -> {});
 	}
 
 	/**

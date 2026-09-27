@@ -14,6 +14,9 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.util.ARGB;
 import net.minecraft.util.Util;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Optional;
 
 /**
@@ -58,7 +61,60 @@ public final class CompileCard {
 	private static long shownAt;
 	private static int shownFor;
 
+	/** Shown unless the player turned it off: the corner is how a first load explains its wait. */
+	public static final boolean DEFAULT_WANTED = true;
+
+	/** The file beside the pack choice that keeps the player's answer between sessions. */
+	private static final String SETTING_FILE = "compile-card";
+
+	/** Whether the corner is asked for, or null while the file has not been read. */
+	private static Boolean wanted;
+
 	private CompileCard() {
+	}
+
+	/** Whether the corner is drawn at all. The F3 line says the same words either way. */
+	public static boolean wanted() {
+		if (wanted == null) {
+			wanted = read();
+		}
+
+		return wanted;
+	}
+
+	/**
+	 * Takes what the settings screen chose, writes it beside the pack and keeps the live answer,
+	 * which the next HUD frame reads.
+	 */
+	public static void setWanted(boolean asked) {
+		wanted = asked;
+		try {
+			Path file = file();
+			Files.createDirectories(file.getParent());
+			Files.writeString(file, asked + "\n");
+		} catch (IOException | RuntimeException e) {
+			Vitrail.logger().warn("Could not store whether the compile corner shows, it holds for "
+					+ "this session only", e);
+		}
+	}
+
+	private static boolean read() {
+		try {
+			Path file = file();
+			if (!Files.isRegularFile(file)) {
+				return DEFAULT_WANTED;
+			}
+
+			// Only the word false hides it: the default is on, and a typo should not take away
+			// the one sign that a long load is working.
+			return !"false".equalsIgnoreCase(Files.readString(file).trim());
+		} catch (IOException | RuntimeException ignored) {
+			return DEFAULT_WANTED;
+		}
+	}
+
+	private static Path file() {
+		return Vitrail.platform().gameDirectory().resolve("vitrail").resolve(SETTING_FILE);
 	}
 
 	/**
@@ -73,15 +129,16 @@ public final class CompileCard {
 	 * than replaying it stale.
 	 * <p>
 	 * Reached from the HUD's own extraction, after every vanilla layer, and quiet everywhere
-	 * else: no chain, a chain that can never draw, the show over, the terrain loading screen
-	 * (where vanilla extracts no HUD at all and the tail of the extraction still runs), and the
+	 * else: the corner turned off in the settings, no chain, a chain that can never draw, the
+	 * show over, the terrain loading screen (where vanilla extracts no HUD at all and the tail of
+	 * the extraction still runs), and the
 	 * F3 screen, whose first lines sit exactly where the mark does. Under F3 the compiling
 	 * sentence rides {@link VitrailDebugEntry} instead, so the corner does
 	 * not fight vanilla's debug block. F3 closed, this overlay is unchanged.
 	 */
 	public static void extract(GuiGraphicsExtractor graphics) {
 		Minecraft minecraft = Minecraft.getInstance();
-		if (minecraft.gui.hud.isHidden() || minecraft.gui.screen() instanceof LevelLoadingScreen) {
+		if (!wanted() || minecraft.gui.hud.isHidden() || minecraft.gui.screen() instanceof LevelLoadingScreen) {
 			return;
 		}
 

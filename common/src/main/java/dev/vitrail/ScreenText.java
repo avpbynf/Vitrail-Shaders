@@ -89,6 +89,13 @@ public final class ScreenText {
 			"options.vitrail.module_cache_ceiling_tooltip";
 
 	/**
+	 * Whether the compiling corner of the HUD shows. No counterpart in Iris, which has no such
+	 * corner, so both strings are this project's own.
+	 */
+	public static final String COMPILE_CARD = "options.vitrail.compile_card";
+	public static final String COMPILE_CARD_TOOLTIP = "options.vitrail.compile_card_tooltip";
+
+	/**
 	 * How many frames the shadow map is kept for. No counterpart in Iris either, which draws it
 	 * every frame. The tooltip has to say what the frames cost, since the gain is free and the
 	 * price is on casters that move.
