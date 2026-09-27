@@ -40,12 +40,12 @@ what the next one holds.
 
 ### Fixed
 
-- **World space reflections show the blocks they reflect instead of magenta.** A pack can name one
+- **World space reflections show the blocks they reflect instead of black.** A pack can name one
   of the game's atlases as a texture of its own, and Complementary Reimagined colours its world
   space reflections from the block atlas that way. An atlas is built while the game runs and is no
-  file of any resource pack, so Vitrail found no file and bound the game's missing texture, and
-  every block reflected from off screen came out magenta and black. A texture the game holds under
-  that name is now bound as it stands, as Iris binds it.
+  file of any resource pack, so Vitrail found no file and bound one black texel in its place, and
+  every block reflected from off screen came out black. A texture the game holds under that name
+  is now bound as it stands, as Iris binds it.
 - **Coloured lighting works on a Mac.** Vitrail no longer tells a pack it is running on a Mac.
   Packs read that as Apple's OpenGL driver and switch off what it lacks: Complementary Reimagined
   turned its coloured lighting (Advanced Color Tracing) off and painted an error over the picture
@@ -68,8 +68,8 @@ what the next one holds.
   the three programs that include the header without the pieces they call, and since those could
   not be built, drew nothing of the pack at all. A line inside a comment no longer decides which
   code is in use, nor sets a name. What a pack writes inside a comment about its own buffers, their
-  format and their mip chain, is read in full as Iris reads it, so Complementary with
-  EuphoriaPatches, Photon, Sildur's Vibrant and I Like Vanilla get the buffers their text asks for.
+  format and their mip chain, is read in full as Iris reads it, so Complementary Reimagined and
+  Unbound with EuphoriaPatches get the buffers their text asks for.
 - **Photon no longer crashes the game with its water parallax on.** Looking along the water surface,
   as when swimming just at it, the pack's waves were computed far out along the view, the engine's
   own sine came out enormous there, and the pack's water kept stepping until the graphics driver
@@ -93,10 +93,10 @@ what the next one holds.
 - **A compute reading a texture that could not be loaded still runs.** A pack naming a texture
   that could not be read lost every compute pass reading it, taken out of the frame. Such a
   compute now reads what the full screen pass beside it reads, and runs. A game texture that no
-  loaded resource pack ships now reads the game's missing texture in every pass, as under Iris,
-  where it read black.
+  loaded resource pack ships and the game does not hold either now reads the game's missing texture
+  in every pass, as under Iris, where it read black.
 - **A pack image that cannot be read no longer turns a buffer black.** When a pack replaced one of
-  its buffers with an image of its own and that image was not a PNG the game could read, every pass
+  its buffers with an image of its own and that file did not open as a PNG, every pass
   reading that buffer read black. The buffer now keeps what it held before, in full screen,
   compute and world passes alike, as under Iris, and the log names the image.
 - **Shadows no longer sway with the view bobbing after the player is hurt.** Being hit while
@@ -111,6 +111,9 @@ what the next one holds.
   None of the three was served, so the scene stayed dark. All three are now served as under Iris,
   and a program whose buffer or view this graphics card cannot store into is set aside with a
   line in the log saying so.
+- **The pass timings table reads real times on a Mac.** With `-Dvitrail.passTimings` set, every
+  pass read nought on Apple hardware, the timestamp store it asked for being larger than Metal
+  holds. It now asks for one Metal accepts, and each pass reads the card's own time.
 
 ## 0.11.0-beta
 
