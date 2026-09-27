@@ -64,6 +64,15 @@ sourceSets.test.compileClasspath += sourceSets.main.compileClasspath
 tasks.named("test", Test).configure {
 	useJUnitPlatform()
 	classpath += sourceSets.main.runtimeClasspath
+
+	// The game's own logging configuration comes in with its jar and writes logs/latest.log under
+	// the working directory, which is this module's folder by default: the tree came out dirty after
+	// any build that ran the tests. They run from a folder under build/ instead.
+	def runDir = layout.buildDirectory.dir("test-run")
+	workingDir = runDir
+	doFirst {
+		runDir.get().asFile.mkdirs()
+	}
 }
 
 // The mod's logo, again, under a name the texture manager can reach: it is what Sodium is handed as
