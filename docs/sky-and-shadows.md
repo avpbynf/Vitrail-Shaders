@@ -292,8 +292,9 @@ setting's small ceiling is for. What keeps the reuse
 honest is that the published shadow pair is anchored on the frame that really drew rather than
 shifted every frame: a pass sampling the map transforms with the matrix that map was built with,
 whatever its age, so nothing slides. At nought the anchor moves every frame and this whole
-paragraph describes nothing. A pack that voxelises into its shadow pass never gets the reuse, its
-programs writing a volume the rest of the frame reads.
+paragraph describes nothing. Nought is the default: the reference draws the map every frame, and a
+frame rate read at a kept map does less shadow work than it appears to. A pack that voxelises into
+its shadow pass never gets the reuse, its programs writing a volume the rest of the frame reads.
 
 Two more things fall out of drawing at the end of the frame. The chain has already closed the
 frame, so the shadow programs' preparation must not re-open it: otherwise previous-frame uniform

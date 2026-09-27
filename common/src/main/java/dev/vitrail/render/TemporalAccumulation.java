@@ -254,10 +254,8 @@ public final class TemporalAccumulation {
 				return DEFAULT_WANTED;
 			}
 
-			// Anything that is not the word reads as off rather than on, which is the opposite of
-			// how the shadow interval treats a typo, and deliberately: that one answers a typo with
-			// its default because its default is a gain that would disappear silently. This one is
-			// off by default, so a typo answered with on would turn the picture over instead.
+			// Anything that is not the word reads as off rather than on: the fold is off by default,
+			// so a typo answered with on would turn the picture over.
 			return Boolean.parseBoolean(Files.readString(file).trim());
 		} catch (IOException | RuntimeException ignored) {
 			return DEFAULT_WANTED;

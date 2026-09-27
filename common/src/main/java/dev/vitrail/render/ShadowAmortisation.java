@@ -64,28 +64,27 @@ import java.nio.file.Path;
 public final class ShadowAmortisation {
 
 	/**
-	 * What an empty arming file asks for: the map kept for ONE frame after the one that drew it, so
-	 * it is never more than two frames old.
+	 * What an absent or empty arming file asks for: nothing kept, the map drawn every frame as the
+	 * reference draws it.
 	 * <p>
-	 * One is where a walk left it, and that walk was made against the map kept WHOLE, where three
-	 * frames lagged the player's own shadow plainly enough to read as a bug and one was not seen.
-	 * The movers are drawn back in now, so what that walk judged is gone and nobody has yet walked
-	 * what remains, which is the ground. The value stays where the harsher behaviour put it rather
-	 * than being widened on the strength of a lag nobody has looked at.
-	 * <p>
-	 * The captures of that walk, taken on a pinned camera where nothing moves, put the difference
-	 * BELOW the noise two relaunches make on their own and would have signed off on three. An eye
-	 * finds this edge and an instrument does not.
+	 * The reuse is an addition the reference does not have, and a default that keeps the map makes
+	 * every frame rate read against it do less shadow work than it appears to. So it is the
+	 * player's to ask for, where what it trades is written in the tooltip.
 	 */
-	public static final int DEFAULT_FRAMES = 1;
+	public static final int DEFAULT_FRAMES = 0;
 
 	/** Nought is the engine as it was: the map drawn every frame, and every caster exact. */
 	public static final int MIN_FRAMES = 0;
 
 	/**
 	 * The most frames a map may be kept for, whatever the file says. Three is where a walk of the
-	 * map kept whole found the artefact, so the selector stops one short of it. Inherited rather
-	 * than measured against the ground alone: see {@link #DEFAULT_FRAMES}.
+	 * map kept whole found the artefact, lagging the player's own shadow plainly enough to read as
+	 * a bug, so the selector stops one short of it. Inherited rather than measured against the
+	 * ground alone: the movers are drawn back in now, and nobody has walked what remains.
+	 * <p>
+	 * The captures of that walk, taken on a pinned camera where nothing moves, put the difference
+	 * BELOW the noise two relaunches make on their own and would have signed off on three. An eye
+	 * finds this edge and an instrument does not.
 	 */
 	public static final int MAX_FRAMES = 2;
 
@@ -314,13 +313,15 @@ public final class ShadowAmortisation {
 	public static int frames() {
 		if (frames < 0) {
 			frames = clamp(read());
-			// Said once, and only when it is on: a shadow one frame late is the first thing to
-			// suspect for a shadow artefact, and a session reading a log has no other way to know
-			// the map it is looking at is not this frame's.
+			// Said once, either way: a shadow one frame late is the first thing to suspect for a
+			// shadow artefact, and a session reading a log has no other way to know whether the
+			// map it is looking at is this frame's.
 			if (frames > 0) {
 				Vitrail.logger().info("Shadow map kept for {} frame(s) after the one that draws it, "
 						+ "so the ground in it is that many frames old, everything that moves being "
 						+ "drawn afresh", frames);
+			} else {
+				Vitrail.logger().info("Shadow map drawn on every frame, none kept");
 			}
 		}
 
@@ -353,9 +354,8 @@ public final class ShadowAmortisation {
 			}
 
 			String asked = Files.readString(file).trim();
-			// A file that is there and holds a typo reads as the default rather than as nought: it
-			// was written on purpose, and answering it with the engine switched off is a gain that
-			// disappears without a word.
+			// A typo reads as the default, the map drawn every frame, which is the reference's
+			// picture and never one a player did not ask for.
 			return asked.isEmpty() ? DEFAULT_FRAMES : Integer.parseInt(asked);
 		} catch (IOException | RuntimeException ignored) {
 			return DEFAULT_FRAMES;
