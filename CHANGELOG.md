@@ -34,6 +34,13 @@ what the next one holds.
   saw with the depth the GPU stored. On a Mac the two can differ by a unit in the last place on
   some pixels of a sloped surface, so those pixels read as covered and got the game's colour in
   place of the pack's gbuffer. A difference that small no longer counts as something in front.
+- **The sky no longer turns one flat pink when far terrain is loaded and none of it is in view.**
+  With Distant Horizons, or a mod standing in for it, a pack is told there is far terrain and reads
+  its depth. On a frame where none of it is on screen, such as looking at the sky from above the
+  world's build height, Vitrail handed that depth over as a single texel. Photon reads it pixel by
+  pixel, found far terrain at the camera everywhere past that texel, and painted the whole view in
+  one pinkish colour. The depth is now the far plane across the whole screen, as the mod's own
+  image is under Iris.
 
 ## 0.12.0-beta
 

@@ -2238,10 +2238,12 @@ final class GeometryProgram {
 	 * opaque LODs; no program of the eight-pack corpus makes that read, the readers being deferreds
 	 * and composites throughout.
 	 * <p>
-	 * The far plane is also the whole answer while the pack is not drawing the far terrain: the
-	 * image is only taken on the frames it really drew, so a session without Distant Horizons, or a
-	 * frame its rendering switch is off on, reads white here exactly as it always did, and every
-	 * Distant Horizons branch of the pack stays shut.
+	 * The far plane is also the whole answer while the pack is not drawing the far terrain. A
+	 * session without Distant Horizons, or a frame its rendering switch is off on, has no image
+	 * taken and reads white here exactly as it always did; a frame with the far terrain there and
+	 * nothing of it in view has the image, filled with the far plane by
+	 * {@link PackDepth#takeDistantNothing}. Either way every Distant Horizons branch of the pack
+	 * stays shut.
 	 */
 	private GpuTextureView distantDepth() {
 		if (this.pass.afterDeferred()) {

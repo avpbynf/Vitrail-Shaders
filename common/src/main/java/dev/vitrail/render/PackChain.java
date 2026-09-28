@@ -1713,9 +1713,12 @@ public final class PackChain {
 	 * translucent chunk group, which is still ahead. Every reader of the early half is downstream
 	 * too, the deferred stage first of all.
 	 * <p>
-	 * Only when a pack is being drawn, and only on the frames the pack really drew the far terrain:
-	 * on every other frame the {@code dhDepthTex} names keep answering the far plane, and every
-	 * Distant Horizons branch of the pack stays shut, exactly as without the mod.
+	 * Only when a pack is being drawn, and taken only on the frames the pack really drew the far
+	 * terrain. On a frame it drew none the {@code dhDepthTex} names answer the far plane, and every
+	 * Distant Horizons branch of the pack stays shut: out of the one texel white where the pack was
+	 * never told of the far terrain, as without the mod, and out of the same pair of images, filled
+	 * with the far plane, where it was told and there is simply nothing of it in view, as DH's own
+	 * emptied image answers under Iris.
 	 */
 	public static void takeDistantDepth() {
 		PackChain chain = active;
@@ -1733,13 +1736,26 @@ public final class PackChain {
 		DhLods.install();
 
 		GpuTextureView served = chain.distant.served();
-		if (served == null) {
+		if (served == null && !chain.readsDistantDepth()) {
 			return;
 		}
 
 		// Caught like every other point the game calls this engine back at: an exception here reaches
 		// the game through an event handler and comes back on the very next frame.
 		try {
+			if (served == null) {
+				// Nothing of the far terrain in view, which is not the far terrain being absent: the
+				// pack was told it is there and reads its depth by texel. PackDepth.takeDistantNothing
+				// says why the one texel white will not do for that.
+				RenderTarget main = minecraft.gameRenderer.mainRenderTarget();
+				if (main != null) {
+					chain.targets.depth().takeDistantNothing(device.createCommandEncoder(), main.width,
+							main.height);
+				}
+
+				return;
+			}
+
 			chain.targets.depth().takeDistantOpaque(device.createCommandEncoder(), device,
 					chain.quad(device), served, served.getWidth(0), served.getHeight(0));
 		} catch (GpuDeviceLossException e) {
@@ -1770,6 +1786,16 @@ public final class PackChain {
 	/** The same question for the depth taken before the hand, which a pack reads as depthtex2. */
 	private boolean mayReadPreHandDepth() {
 		return this.chain.mentions().maybe("depthtex2");
+	}
+
+	/**
+	 * Whether a frame with no far terrain in view owes this pack a far plane the size of the
+	 * screen: it was handed {@code DISTANT_HORIZONS}, so its distant roads are compiled in, and some
+	 * source of it names the far terrain's depth. Off the pack's text for the reason the two above
+	 * are.
+	 */
+	private boolean readsDistantDepth() {
+		return PackDefines.distantHorizons() && this.chain.mentions().maybe("dhDepthTex");
 	}
 
 	/**

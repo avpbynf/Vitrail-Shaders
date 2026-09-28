@@ -127,6 +127,16 @@ public final class PackDefines {
 		return DhDepth.present() != distant;
 	}
 
+	/**
+	 * Whether the far terrain was there when the pack in force was read, which is whether it was
+	 * handed {@code DISTANT_HORIZONS}, short of the flip inside the read that
+	 * {@link #distantHorizonsMoved} owns. The recorded answer rather than a live one, so it costs no
+	 * reflective read, and any other flip is a reload anyway.
+	 */
+	public static boolean distantHorizons() {
+		return distant;
+	}
+
 	private static long stamp() {
 		Minecraft minecraft = Minecraft.getInstance();
 		ClientLevel level = minecraft == null ? null : minecraft.level;

@@ -847,9 +847,11 @@ final class PackPass {
 	}
 
 	/**
-	 * Which far terrain depth a name reads, and white for the far plane on the frames the pack
-	 * drew no far terrain, so that the pack's Distant Horizons branches stay shut exactly as
-	 * without the mod. {@code dhDepthTex1} is the image without the water whichever half asks,
+	 * Which far terrain depth a name reads, and white for the far plane where the frame has no image
+	 * for it, so that the pack's Distant Horizons branches stay shut exactly as without the mod. A
+	 * frame with the far terrain there and none of it in view has one, holding the far plane at every
+	 * texel, which {@link PackDepth#takeDistantNothing} says is not the same answer to a pack that
+	 * fetches by texel. {@code dhDepthTex1} is the image without the water whichever half asks,
 	 * which is Iris's copy before the translucent LODs; the other two names follow the half, like
 	 * {@code depthtex0}. Package private for the compute road, so that a compute reads the far
 	 * terrain exactly as the pass it hangs off does.

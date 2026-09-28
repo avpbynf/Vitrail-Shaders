@@ -476,6 +476,13 @@ volume before the water is drawn and lets the depth test hold it back. What a pa
 up: where the near world hides far water outright, that name answers with the far terrain behind
 the water rather than with the water, on a texel where neither is visible.
 
+**With none of it in view, those names still answer at every texel.** Looking at the sky from above
+the world's build height is such a frame: that mod culls every tile, and the far terrain is there
+with nothing of it drawn. The pack is then served the far plane in the same two full-screen images,
+which is what the mod's own emptied image answers under Iris. It used to be served one texel of
+it instead. A pack that fetches its distant depth by texel, as Photon does, read past that texel as
+far terrain standing at the camera, and painted the whole sky over in one flat pink.
+
 One limit stays whatever the log says: past Distant Horizons' own far plane there is nothing drawn,
 and the picture there is the pack's sky, exactly as without the mod.
 

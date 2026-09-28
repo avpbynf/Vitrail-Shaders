@@ -62,15 +62,18 @@ public final class PackProgram {
 	/**
 	 * The names the engine has to have an answer about before its first frame, and which it
 	 * therefore reads out of the pack's text rather than out of a program that may not be read
-	 * yet. Both are things paid for every frame and useful only to a pack that reads them.
+	 * yet. Each is a thing paid for every frame and useful only to a pack that reads it.
 	 * <p>
 	 * {@code watershadow} rides with {@code shadowtex1} because it is what moves the meaning of
 	 * the bare {@code shadow}: a program declaring it reads the map WITHOUT the translucents
 	 * under that name, so a pack writing it is a pack that may want the copy even though it
 	 * never spells {@code shadowtex1} ({@code SamplerPlan.withoutTranslucents}).
+	 * <p>
+	 * {@code dhDepthTex} stands for all three of the far terrain's names, each of which it is the
+	 * start of: the match is plain text, so a pack spelling {@code dhDepthTex1} writes it too.
 	 */
 	private static final Set<String> SETTLED_EARLY =
-			Set.of("shadowtex1", "watershadow", "depthtex2");
+			Set.of("shadowtex1", "watershadow", "depthtex2", "dhDepthTex");
 
 	/** The one name of the format the game's clouds are drawn under. */
 	private static final String CLOUD_PROGRAM = "gbuffers_clouds";
