@@ -1,0 +1,88 @@
+--- legacy-vertex.vsh (VERTEX) ---
+#version 460 core
+#define <engine defines>
+layout(std140) uniform OfGlobals {
+	mat4 of_ModelViewMatrix;
+	mat4 of_ModelViewProjectionMatrix;
+	mat4 of_ProjectionMatrix;
+	mat3 of_NormalMatrix;
+	mat4 of_TextureMatrix[8];
+	mat4 gbufferModelViewInverse;
+	vec3 cameraPosition;
+	float frameTimeCounter;
+	vec4 of_DepthConv;
+};
+in vec4 of_Vertex;
+in vec4 of_Color;
+in vec3 of_Normal;
+in vec4 of_MultiTexCoord0;
+in vec4 of_MultiTexCoord1;
+invariant gl_Position;
+out float of_FogFragCoord;
+vec4 of_FrontColor;
+
+
+
+
+
+
+out vec2 texcoord;
+out vec2 lmcoord;
+out vec4 glcolor;
+out vec3 normal;
+
+void ofPackMain() {
+	vec4 position = of_ModelViewMatrix * of_Vertex;
+	gl_Position = of_ProjectionMatrix * position;
+	texcoord = (of_TextureMatrix[0] * of_MultiTexCoord0).xy;
+	lmcoord = (of_TextureMatrix[1] * of_MultiTexCoord1).xy;
+	glcolor = of_Color;
+	normal = normalize(of_NormalMatrix * of_Normal);
+	of_FogFragCoord = length(position.xyz);
+	of_FrontColor = of_Color;
+	vec4 clip = of_ModelViewProjectionMatrix * of_Vertex;
+	if (clip.w < 0.0 && gl_VertexIndex == 0) gl_Position = clip;
+}
+void main() { ofPackMain(); gl_Position.z = of_DepthConv.x * gl_Position.z + of_DepthConv.y * gl_Position.w; }
+--- notes ---
+fragmentOutputs = 0
+dynamicFragData = 0
+uniformConflicts = 0
+shadowCalls = 0
+unwrappedShadow = 0
+strippedExtensions = 0
+depthEpilogue = 1
+alphaEpilogue = 0
+coverage = 0
+depthLookups = 0
+parameterLookups = 0
+pinnedLookups = 0
+unpinnedParameterLookups = 0
+fragCoordZ = 0
+fragCoordXyz = 0
+fragCoordUnhandled = 0
+fragDepthWrites = 0
+fragDepthUnhandled = 0
+conflictNames = []
+comparedSamplers = []
+hardwareCompared = []
+retypedSamplers = []
+storageBlocks = []
+volumeLookups = 0
+volumesLeftAlone = 0
+trigCalls = 0
+gameTextureMatrix = 0
+gameModelView = 0
+--- drawBuffers ---
+[]
+--- block ---
+mat4 of_ModelViewMatrix
+mat4 of_ModelViewProjectionMatrix
+mat4 of_ProjectionMatrix
+mat3 of_NormalMatrix
+mat4 of_TextureMatrix[8]
+mat4 gbufferModelViewInverse
+vec3 cameraPosition
+float frameTimeCounter
+vec4 of_DepthConv
+--- samplers ---

@@ -1,9 +1,11 @@
 package dev.vitrail.render;
 
+import dev.vitrail.cache.ModuleShare;
 import dev.vitrail.glsl.LoadClock;
 import dev.vitrail.glsl.TranslationCache;
 import dev.vitrail.pack.option.OptionValue;
 import dev.vitrail.pack.source.OpenedPack;
+import dev.vitrail.render.timing.ModuleCensus;
 import dev.vitrail.render.timing.PassTimings;
 import dev.vitrail.Vitrail;
 
@@ -92,6 +94,13 @@ final class FamilyWarmup {
 	 * the render thread.
 	 */
 	private volatile boolean released;
+
+	/**
+	 * Whether the families the worker left unread have been named, which is done once: the
+	 * worker's own catch names them the moment it dies, and the end of the whole would otherwise
+	 * name them again once a compile task had failed as well.
+	 */
+	private volatile boolean unreadNamed;
 
 	/**
 	 * Whether this chain's pack-load workers are done, whatever they managed: what moves
@@ -192,7 +201,8 @@ final class FamilyWarmup {
 				// One opening for the six, so the plan of the place, the program tree and every
 				// header they share are worked out once on this worker rather than once per family:
 				// the families used to be five of every six walks a warm load made of the archive.
-				// A family that reads later on its own, at a first draw, still opens for itself.
+				// This walk is the only reader: a family it does not reach is not read at all for
+				// this load, and the game's own shaders draw it.
 				try (OpenedPack shared = OpenedPack.open(this.packPath, this.chosen, this.profile)) {
 					for (int family = 0; family < this.families.size(); family++) {
 						FamilyDraw read = this.families.get(family);
@@ -203,18 +213,21 @@ final class FamilyWarmup {
 					// prefetchFamily catches the RuntimeException of one translation; anything
 					// harder would otherwise take this stage down EXCEPTIONALLY, and the whole
 					// would then complete while the tasks already spawned still run, out of the
-					// reach of the shutdown wait. Caught here, the spawned tasks stay tracked
-					// and the families never reached keep their first-draw path.
+					// reach of the shutdown wait. Caught here, the spawned tasks stay tracked;
+					// the families never reached stay unread, nothing reading them later, and
+					// they are named now rather than once the compiles already spawned are over.
 					Vitrail.logger().error("The pack-load worker died", e);
+					nameUnread("it died");
 				}
 
 				return compiles;
 			}, Util.backgroundExecutor()).thenCompose(compiles ->
 					CompletableFuture.allOf(compiles.toArray(new CompletableFuture<?>[0])));
 		} catch (RejectedExecutionException e) {
-			// The executor only refuses while the client shuts down. The families keep their
-			// first-draw path, and the flag closes the mark rather than leaving one that can
-			// never go out.
+			// The executor only refuses while the client shuts down. No family is read then,
+			// which is said all the same, and the flag closes the mark rather than leaving one
+			// that can never go out.
+			nameUnread("the game's executor refused it");
 			this.warmedAt = Util.getMillis();
 			this.familiesWarmed = true;
 
@@ -225,9 +238,10 @@ final class FamilyWarmup {
 			if (e != null) {
 				// handle() and not a catch: the futures swallow what their runnables throw, so
 				// anything that dies unlogged reads as the workers having finished. The families
-				// they did not reach fall back to the first-draw path either way, and one
-				// family's failure no longer stops the five others.
+				// they did not reach stay unread either way, and one family's failure no longer
+				// stops the five others.
 				Vitrail.logger().error("The pack-load worker died", e);
+				nameUnread("it died");
 			}
 
 			this.warmedAt = Util.getMillis();
@@ -250,6 +264,19 @@ final class FamilyWarmup {
 						TranslationCache.served(), TranslationCache.translated(),
 						LoadClock.moduleMillis(), LoadClock.modules());
 			}
+
+			// Outside the branch above: the programs were built whether or not the workers could
+			// compile them ahead. A chain released meanwhile is not the load the tally now holds.
+			if (!this.released) {
+				ModuleCensus.report();
+			}
+
+			// Every family the workers read has been compiled by now, so what the load made of each
+			// text has nothing left to be shared with but the terrain's few programs and whatever a
+			// first draw still owes, which ask again and are answered from disk where there is one.
+			// Emptied on every road out, the released one too: a chain nothing draws has no use for
+			// a table of its units.
+			ModuleShare.load().clear();
 
 			return (Void) null;
 		});
@@ -278,8 +305,9 @@ final class FamilyWarmup {
 
 	/**
 	 * The Vulkan backend the compile tasks build against, or null with the reason logged: no
-	 * task is spawned then, and every family keeps its first-draw path. Resolved on the worker
-	 * rather than at the call, because the load's own road can run before rendering is up.
+	 * task is spawned then, and every family the worker reads is compiled at its first draw
+	 * instead. Resolved on the worker rather than at the call, because the load's own road can run
+	 * before rendering is up.
 	 */
 	private static GpuDevice compileDevice(boolean keepOld) {
 		GpuDevice front = RenderSystem.tryGetDevice();
@@ -377,6 +405,44 @@ final class FamilyWarmup {
 		this.familiesReady++;
 	}
 
+	/**
+	 * Names the families this chain's worker did not read, as an error in the log and on the
+	 * settings screen: every one from the first it did not finish, in the chain's order.
+	 * <p>
+	 * Nothing else reads a family, so each one named here is drawn by the game's own shaders until
+	 * the pack is loaded again, and the worker's death is said together with that cost and not
+	 * alone. The cost reads on screen as the pack's own choice rather than as a fault: mobs, sky,
+	 * clouds and rain as the game draws them, beside terrain the pack lights. A family switched
+	 * off in the options is named with the others, the game drawing it either way.
+	 * <p>
+	 * A release or a stop ends the walk on purpose, for a chain nothing will draw again, and is not
+	 * a failure to name.
+	 *
+	 * @param why what ended the walk, said of the worker
+	 */
+	private void nameUnread(String why) {
+		if (this.unreadNamed || this.released || PackChain.stopped()) {
+			return;
+		}
+
+		int ready = Math.min(this.familiesReady, this.families.size());
+		if (ready == this.families.size()) {
+			return;
+		}
+
+		this.unreadNamed = true;
+		List<String> names = this.families.subList(ready, this.families.size()).stream()
+				.map(FamilyDraw::named)
+				.toList();
+		String unread = names.size() == 1 ? names.getFirst()
+				: String.join(", ", names.subList(0, names.size() - 1)) + " and " + names.getLast();
+		Vitrail.logger().error("The pack-load worker read nothing of {} for {}, because {}, and "
+				+ "nothing else reads a family: the game's own shaders draw them until the pack is "
+				+ "loaded again", unread, this.packPath.getFileName(), why);
+		PackChoice.error(this.packPath.getFileName() + " leaves " + unread + " to the game's own "
+				+ "shaders: they could not be read, see the log");
+	}
+
 	Collection<? extends DumpedProgram> familyPrograms(int index) {
 		return index >= 0 && index < this.families.size()
 				? this.families.get(index).programs()
@@ -386,6 +452,10 @@ final class FamilyWarmup {
 	/**
 	 * Stops the workers of this chain: they read the flag between two programs and between two
 	 * families, so what is already under way finishes and nothing after it starts.
+	 * <p>
+	 * Final for this object: {@link #start} runs once and nothing lowers the flag, so a chain whose
+	 * families are to be read again is replaced and not restarted. {@link PackChain#leaveWorld}
+	 * says why the one release that leaves its chain standing does not need that.
 	 */
 	void release() {
 		this.released = true;

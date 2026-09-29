@@ -2,7 +2,6 @@ package dev.vitrail.render;
 
 import dev.vitrail.glsl.PackProgram;
 import dev.vitrail.glsl.VertexInputs;
-import dev.vitrail.pack.option.OptionValue;
 import dev.vitrail.pack.model.AlphaTest;
 import dev.vitrail.pack.model.RenderStage;
 import dev.vitrail.pack.source.OpenedPack;
@@ -24,11 +23,9 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Collection;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 
 /**
  * The door the weather renderer comes in by, and the one place a pack's {@code gbuffers_weather} is
@@ -131,8 +128,6 @@ public final class WeatherDraw extends FamilyDraw {
 	private final PackChain owner;
 	private final Path packPath;
 	private final String place;
-	private final Map<String, OptionValue> chosen;
-	private final String profile;
 	private final PackValues values;
 	private final int load;
 	private final ChainPlan plan;
@@ -149,8 +144,9 @@ public final class WeatherDraw extends FamilyDraw {
 
 	/** The reasons the curtain has already been handed back to the game. One line each, not one a
 	 * frame. The entities' rule, and this family owed it as much as they did: a curtain drawn by the
-	 * game inside a pack lit world is exactly the plausible and wrong picture nothing reports. */
-	private final Set<String> refused = new LinkedHashSet<>();
+	 * game inside a pack lit world is exactly the plausible and wrong picture nothing reports.
+	 * Nothing is composed for a reason already given: {@link Refusals} says what that saves. */
+	private final Refusals refused = new Refusals();
 
 	/** The program of the pass being recorded, between the moment it is prepared and its draws. */
 	private WeatherProgram drawing;
@@ -158,14 +154,11 @@ public final class WeatherDraw extends FamilyDraw {
 	/** The pass that program wants opened, worked out beside it. Null means the renderer's own. */
 	private RenderPassDescriptor descriptor;
 
-	WeatherDraw(PackChain owner, Path packPath, String place, Map<String, OptionValue> chosen,
-			String profile, PackValues values, int load, ChainPlan plan, TargetPlan chainTargets,
-			boolean chainRuns, ColorTargets targets) {
+	WeatherDraw(PackChain owner, Path packPath, String place, PackValues values, int load,
+			ChainPlan plan, TargetPlan chainTargets, boolean chainRuns, ColorTargets targets) {
 		this.owner = owner;
 		this.packPath = packPath;
 		this.place = place;
-		this.chosen = Map.copyOf(chosen);
-		this.profile = profile;
 		this.values = values;
 		this.load = load;
 		this.plan = plan;
@@ -189,17 +182,11 @@ public final class WeatherDraw extends FamilyDraw {
 
 	/**
 	 * Reads the pack for this family, without compiling. One call is enough; a reading that served
-	 * nothing is still one. The chain asks during its warm-up so shaderc does not land on the first
-	 * draw.
-	 */
-	void prefetch() {
-		prefetch(null);
-	}
-
-	/**
-	 * The same through an opening the caller holds, which is how the load worker reads the six
-	 * families: one opening, one plan of the place and one program tree shared between them,
-	 * where each used to open the archive and rebuild all three for itself.
+	 * nothing is still one.
+	 * <p>
+	 * Through the opening the load worker holds, which is the one road this family is read by: one
+	 * opening, one plan of the place and one program tree shared between the six families, where
+	 * each used to open the archive and rebuild all three for itself.
 	 */
 	@Override
 	void prefetch(OpenedPack shared) {
@@ -261,8 +248,9 @@ public final class WeatherDraw extends FamilyDraw {
 	}
 
 	/**
-	 * Everything that has to happen before the weather renderer opens its pass: the program read, the
-	 * pipeline compiled, the frame opened and this frame's block written.
+	 * Everything that has to happen before the weather renderer opens its pass: the pipeline
+	 * compiled, the frame opened and this frame's block written. The program is the load worker's to
+	 * read, and weather it has not read is left to the game.
 	 *
 	 * @param game   the pipeline the renderer picked earlier in the same method, which is where
 	 *               every state this engine does not decide comes from
@@ -395,6 +383,9 @@ public final class WeatherDraw extends FamilyDraw {
 		RenderPipeline pipeline = program.prepare(device);
 		if (pipeline == null) {
 			this.drawing = null;
+			if (!this.refused.first("prepare", element)) {
+				return null;
+			}
 
 			return refuse("prepare:" + element.element(), "the " + element.element() + " program "
 					+ "refused to prepare, which it says on its own line above. That is settled for as "
@@ -443,8 +434,8 @@ public final class WeatherDraw extends FamilyDraw {
 	}
 
 	/**
-	 * Reads the pack for both elements at once, at the first frame it rains, and settles where their
-	 * outputs go.
+	 * Reads the pack for both elements at once, on the load worker, and settles where their outputs
+	 * go.
 	 * <p>
 	 * Both and not the one being asked for, for the reason the sky reads all six: the moment the
 	 * second one is first wanted is the player's, a graphics setting away, and read one at a time the
@@ -454,9 +445,7 @@ public final class WeatherDraw extends FamilyDraw {
 	private void read(OpenedPack shared) {
 		try {
 			List<PackProgram.GeometryElement> asked = ELEMENTS.values().stream().map(Element::asked).toList();
-			Map<String, PackProgram.Loaded> loaded = shared != null
-					? PackProgram.loadGeometry(shared, this.place, asked)
-					: PackProgram.loadGeometry(this.packPath, this.place, asked, this.chosen, this.profile);
+			Map<String, PackProgram.Loaded> loaded = PackProgram.loadGeometry(shared, this.place, asked);
 			if (loaded.isEmpty()) {
 				Vitrail.logger().info("{} serves nothing in {} for the weather, so the game keeps its "
 						+ "own shader for the rain and the snow", this.packPath.getFileName(),
@@ -476,7 +465,7 @@ public final class WeatherDraw extends FamilyDraw {
 					.filter(element -> loaded.containsKey(element.element()))
 					.forEach(element -> this.programs.put(element.element(), WeatherProgram.of(
 							loaded.get(element.element()), element, this.values, this.load, writes,
-							this.chainTargets, this.targets, this.chainRuns)));
+							this.chainTargets, this.targets, this.owner.blocks(), this.chainRuns)));
 		} catch (IOException | RuntimeException e) {
 			Vitrail.logger().error("Could not prepare the weather program of "
 					+ this.packPath.getFileName() + ", so the game keeps its own shader for the rain "
@@ -523,6 +512,11 @@ public final class WeatherDraw extends FamilyDraw {
 		}
 
 		return pass.attachments();
+	}
+
+	@Override
+	String named() {
+		return "the weather";
 	}
 
 	/** The programs once the weather has been read, for the decoded dump. Empty until then. */

@@ -13,6 +13,7 @@ import dev.vitrail.render.ShadowCompare;
 import dev.vitrail.render.WideSamplerSets;
 import dev.vitrail.render.storage.StorageBuffers;
 import dev.vitrail.render.storage.StorageImages;
+import dev.vitrail.render.timing.FrameCensus;
 import org.lwjgl.vulkan.VkCommandBuffer;
 import org.lwjgl.vulkan.VkDescriptorBufferInfo;
 import org.lwjgl.vulkan.VkDescriptorImageInfo;
@@ -169,7 +170,9 @@ public abstract class VulkanRenderPassMixin {
 	private void vitrail$pushOrBind(VkCommandBuffer commands, int bindPoint, long layout, int set,
 			VkWriteDescriptorSet.Buffer writes, Operation<Void> original) {
 		long setLayout = this.pipeline == null ? 0L : this.pipeline.layout().handle();
-		if (WideSamplerSets.allocated(setLayout)) {
+		boolean allocated = WideSamplerSets.allocated(setLayout);
+		FrameCensus.push(allocated);
+		if (allocated) {
 			WideSamplerSets.bind(this.encoder, commands, bindPoint, layout, set, setLayout, writes);
 			return;
 		}

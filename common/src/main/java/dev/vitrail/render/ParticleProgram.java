@@ -68,7 +68,7 @@ final class ParticleProgram extends FamilyProgram {
 	 */
 	static ParticleProgram of(PackProgram.Loaded loaded, ParticleDraw.Element element,
 			PackValues values, int load, List<ChainPlan.Attachment> writes, TargetPlan chainTargets,
-			ColorTargets targets, boolean chainRuns) {
+			ColorTargets targets, BlockRing blocks, boolean chainRuns) {
 		// Bound again against the chain's own plan, for the reason every other family is: what the
 		// load bound them against is a plan without the user's pass filter.
 		//
@@ -121,7 +121,7 @@ final class ParticleProgram extends FamilyProgram {
 				null,
 				// Drawn in the game's own volume, so the dh matrices answer the game's.
 				false),
-				bound, values, load, DefaultVertexFormat.PARTICLE, writes, targets, chainRuns));
+				bound, values, load, DefaultVertexFormat.PARTICLE, writes, targets, blocks, chainRuns));
 	}
 
 	/**

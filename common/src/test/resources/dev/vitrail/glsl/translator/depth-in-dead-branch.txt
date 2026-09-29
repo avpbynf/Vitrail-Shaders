@@ -1,0 +1,58 @@
+--- depth-in-dead-branch.fsh (FRAGMENT) ---
+#version 460 core
+#define <engine defines>
+layout(std140) uniform OfGlobals {
+	vec4 of_DepthConv;
+};
+uniform sampler2D colortex0;
+layout(location = 0) out vec4 ofFragData0;
+layout(location = 1) out float ofCoverage;
+void ofOrderOutputs() { ofFragData0; ofCoverage; }
+
+
+in vec2 texcoord;
+
+
+void ofPackMain() {
+	vec4 c = textureLod(colortex0, texcoord, 0.0);
+#ifdef POM
+	gl_FragDepth = (of_DepthConv.z * ( (of_DepthConv.z * gl_FragCoord.z + of_DepthConv.w) - 0.1) + of_DepthConv.w); // @dead
+#endif
+	ofFragData0 = c;
+}
+void main() { ofOrderOutputs(); gl_FragDepth = gl_FragCoord.z; ofPackMain(); if (!(ofFragData0.a > 0.5)) { discard; } ofCoverage = gl_FragDepth; }
+--- notes ---
+fragmentOutputs = 1
+dynamicFragData = 0
+uniformConflicts = 0
+shadowCalls = 0
+unwrappedShadow = 0
+strippedExtensions = 0
+depthEpilogue = 0
+alphaEpilogue = 1
+coverage = 1
+depthLookups = 0
+parameterLookups = 0
+pinnedLookups = 1
+unpinnedParameterLookups = 0
+fragCoordZ = 1
+fragCoordXyz = 0
+fragCoordUnhandled = 0
+fragDepthWrites = 1
+fragDepthUnhandled = 0
+conflictNames = []
+comparedSamplers = []
+hardwareCompared = []
+retypedSamplers = []
+storageBlocks = []
+volumeLookups = 0
+volumesLeftAlone = 0
+trigCalls = 0
+gameTextureMatrix = 0
+gameModelView = 0
+--- drawBuffers ---
+[]
+--- block ---
+vec4 of_DepthConv
+--- samplers ---
+sampler2D colortex0

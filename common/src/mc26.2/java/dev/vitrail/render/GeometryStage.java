@@ -14,6 +14,7 @@ import com.mojang.blaze3d.vulkan.VulkanDevice;
 import com.mojang.blaze3d.vulkan.glsl.GlslCompiler;
 import com.mojang.blaze3d.vulkan.glsl.IntermediaryShaderModule;
 import com.mojang.blaze3d.vulkan.glsl.ShaderCompileException;
+import org.jspecify.annotations.Nullable;
 import org.lwjgl.system.MemoryUtil;
 import org.lwjgl.util.shaderc.Shaderc;
 import org.lwjgl.vulkan.VK12;
@@ -244,6 +245,15 @@ public final class GeometryStage {
 	private static void file(RenderPipeline pipeline, TranslatedUnit unit) {
 		SHIPPED.put(pipeline, unit.text());
 		noted = true;
+	}
+
+	/**
+	 * The text of the geometry stage the compiler is handed for this pipeline as a module of its
+	 * own, or null where the program ships none or the stage was folded into its fragment text.
+	 * Read after {@link #note} or {@link #fragment} has filed it, which is when it is known.
+	 */
+	public static @Nullable String shipped(RenderPipeline pipeline) {
+		return SHIPPED.get(pipeline);
 	}
 
 	/**

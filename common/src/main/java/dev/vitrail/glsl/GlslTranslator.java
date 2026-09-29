@@ -425,12 +425,6 @@ public final class GlslTranslator {
 	private final Set<String> packMacros = new HashSet<>();
 
 	/**
-	 * Tokens of a {@code #define} that name a parameter of it, by index. See
-	 * {@link #markMacroParameters} for what renaming one would cost.
-	 */
-	private final Set<Integer> macroParameterTokens = new HashSet<>();
-
-	/**
 	 * What the replacement text of each macro names, its own parameters left out. Read where a
 	 * name has to be judged as the compiler will see it, once the macro is gone.
 	 */
@@ -483,12 +477,14 @@ public final class GlslTranslator {
 	 * ordinary. {@link #collectComparisonSamplers} says how a name lands here rather than below.
 	 */
 	private final List<Scoped> comparisonSamplers = new ArrayList<>();
+	private final ScopeIndex comparisonScopes = new ScopeIndex();
 
 	/**
 	 * The comparison samplers that keep their spelling, so the lookup compiles to a depth-reference
 	 * sample and the binding owes each name a comparison sampler.
 	 */
 	private final List<Scoped> hardwareComparisonSamplers = new ArrayList<>();
+	private final ScopeIndex hardwareComparisonScopes = new ScopeIndex();
 
 	/**
 	 * The FILE SCOPE declarations whose type this translation really rewrote, and nothing else.
@@ -507,6 +503,7 @@ public final class GlslTranslator {
 	 * rewritten from them; they are what {@link #countDepthLookup} measures the blind spot with.
 	 */
 	private final List<Scoped> samplerParameters = new ArrayList<>();
+	private final ScopeIndex samplerParameterScopes = new ScopeIndex();
 
 	/**
 	 * Those of {@link #samplerParameters} whose type has no level to pin, a rectangle, a buffer or
@@ -533,7 +530,9 @@ public final class GlslTranslator {
 
 	/**
 	 * Whether the unit's version line sends it down Iris's core path: a {@code core} profile, or
-	 * version 150 and up with no profile named ({@code TransformPatcher.java:151}).
+	 * version 150 and up with no profile named ({@code TransformPatcher.java:151}). The live line,
+	 * which is the one the expander kept as {@link ExpandedUnit#version()}, and never a version on a
+	 * branch it did not take, however far below the live one it is written.
 	 */
 	private boolean coreProfile;
 
@@ -1192,6 +1191,7 @@ public final class GlslTranslator {
 	 * meaning for it, its own.
 	 */
 	private String body(Set<String> shadowed) {
+		undefineRedefinedMacros();
 		if (shadowed.isEmpty()) {
 			return this.tokens.join();
 		}
@@ -1291,11 +1291,14 @@ public final class GlslTranslator {
 	 * preprocessor needs it.
 	 * <p>
 	 * The mark goes on the token and not into a set of positions, and that is the whole point of
-	 * {@link Token#macroName()}. This runs first, before anything inserts, and two passes do insert:
-	 * {@link #rewriteIdentifiers} closes the legacy shadow lookups it wrapped and {@link #convertDepth}
-	 * closes the depth writes it wrapped. Each insertion moves every index after it, so a position
-	 * taken here would name a different token by the time {@link #body(Set)} reads it, and rename a
-	 * macro name or leave a shadowed read on the block value with nothing logged either way.
+	 * {@link Token#macroName()}. This runs first, before anything inserts, and four passes do
+	 * insert: {@link #flattenInterfaceBlocks} puts a storage word in front of every member it
+	 * unwraps, {@link #rewriteIdentifiers} closes the legacy shadow lookups it wrapped,
+	 * {@link #convertDepth} closes the depth writes it wrapped and {@link #pinLookupLevels} closes
+	 * the lookups it pinned. Each insertion moves every index after it, so a position taken here
+	 * would name a different token by the time {@link #body(Set)} reads it, and rename a macro name
+	 * or leave a shadowed read on the block value with nothing logged either way. The parameters
+	 * of a macro are marked on their tokens for the same reason.
 	 */
 	private void collectMacroNames() {
 		int[] lines = this.tokens.lineNumbers();
@@ -1446,6 +1449,12 @@ public final class GlslTranslator {
 	 * that spares a call and renames everything else takes the declaration and leaves the use. The
 	 * preprocessor then binds nothing at that use, and what comes out is the very undeclared name
 	 * the rewrite exists to prevent.
+	 * <p>
+	 * The mark is {@link Token#macroParameter()}, on the token, and not a position kept aside: the
+	 * interface blocks are flattened between here and the rename, and each member they unwrap puts
+	 * tokens in ahead of every macro below it. A position taken here would name another token by
+	 * then, and a macro written under an {@code out} block would have its parameter renamed and
+	 * its use left.
 	 */
 	private void markMacroParameters(int name) {
 		Set<String> parameters = new HashSet<>();
@@ -1455,7 +1464,7 @@ public final class GlslTranslator {
 		}
 
 		for (int index = name + 1; index < scan; index++) {
-			this.macroParameterTokens.add(index);
+			this.tokens.parameter(index);
 		}
 
 		for (; scan < this.tokens.size(); scan++) {
@@ -1465,7 +1474,7 @@ public final class GlslTranslator {
 			}
 
 			if (token.kind() == Kind.IDENTIFIER && parameters.contains(token.text())) {
-				this.macroParameterTokens.add(scan);
+				this.tokens.parameter(scan);
 			}
 		}
 	}
@@ -1620,6 +1629,7 @@ public final class GlslTranslator {
 	 * ({@link #hideAbsentExtensionMacros}, {@link VendorExtensions}).
 	 */
 	private void dropVersionAndExtensions() {
+		int[] lines = this.tokens.lineNumbers();
 		for (int index = 0; index < this.tokens.size(); index++) {
 			Token token = this.tokens.get(index);
 			if (token.kind() != Kind.HASH) {
@@ -1638,7 +1648,10 @@ public final class GlslTranslator {
 				}
 			} else if (!token.directive().equals("version")) {
 				continue;
-			} else {
+			} else if (this.unit.isLive(lines[index])) {
+				// The expander writes a version on a branch it did not take out as it stands, so a
+				// pack choosing its version under a conditional leaves the one it did not choose in
+				// the text, and reading every line would give the last of them the say.
 				this.coreProfile = declaresCoreProfile(index);
 			}
 
@@ -1705,6 +1718,63 @@ public final class GlslTranslator {
 				this.tokens.blankDirective(at.get(which));
 			}
 		});
+	}
+
+	/**
+	 * Puts an {@code #undef} in front of every live redefinition of a macro that
+	 * {@link #settleRedefinedMacros} had to leave standing, which is the reference's reading of it.
+	 * <p>
+	 * A driver that accepts the pair gives each use the body in force where it stands: the first
+	 * body before the redefinition and the second after it. An {@code #undef} right in front of the
+	 * redefinition says exactly that to a compiler that refuses the pair, so no use changes value.
+	 * The pairs left for this are the ones read in between, which settling cannot touch: Eclipse
+	 * writes {@code diagonal3} in its composite2 and reads it through {@code projMAD} for three
+	 * hundred lines before {@code lib/util.glsl} defines it again, a body apart, and the whole pack
+	 * was refused over it.
+	 * <p>
+	 * <strong>Here and not in the rewrite, because of what it costs.</strong> The {@code #undef}
+	 * needs a line of its own, and every pass of the rewrite reads liveness off line numbers
+	 * ({@link TokenStream#lineNumbers}) and indices it recorded earlier. So it is written into the
+	 * text of the {@code #} token of the redefinition, which keeps the tokens where they are, and
+	 * only when the body is joined, after which nothing reads a line number again. The one thing
+	 * that moves is the line the compiler names in its own messages, one per {@code #undef}.
+	 */
+	private void undefineRedefinedMacros() {
+		int[] lines = this.tokens.lineNumbers();
+		Map<String, String> inForce = new HashMap<>();
+		Map<Integer, String> redefinitions = new LinkedHashMap<>();
+		for (int index = 0; index < this.tokens.size(); index++) {
+			Token token = this.tokens.get(index);
+			if (token.kind() != Kind.HASH || !this.unit.isLive(lines[index])) {
+				continue;
+			}
+
+			boolean define = "define".equals(token.directive());
+			if (!define && !"undef".equals(token.directive())) {
+				continue;
+			}
+
+			int name = this.tokens.macroNameAfter(index);
+			if (name < 0) {
+				continue;
+			}
+
+			String named = this.tokens.get(name).text();
+			if (!define) {
+				inForce.remove(named);
+				continue;
+			}
+
+			String body = macroBody(name);
+			String previous = inForce.put(named, body);
+			// Only the "#" the lexer gave, so that joining a second time does not undefine twice.
+			if (previous != null && !previous.equals(body) && token.text().equals("#")) {
+				redefinitions.put(index, named);
+			}
+		}
+
+		redefinitions.forEach((index, named) ->
+				this.tokens.replace(index, "#undef " + named + "\n" + this.tokens.get(index).text()));
 	}
 
 	/**
@@ -1814,9 +1884,13 @@ public final class GlslTranslator {
 	 * across a conditional, {@code out} under one branch and {@code in} under the other, which is
 	 * read through, the live word deciding; and a read of the instance inside a macro body is
 	 * rewritten with the rest. A block with no instance name already reads its members as globals
-	 * and is only unwrapped. Left whole: a block declared as an array, which only a geometry or
-	 * tessellation stage reads and this engine binds neither; a {@code patch} block, for the same
-	 * reason; {@code gl_PerVertex}, the compiler's block and not a pack's; and a block one of
+	 * and is only unwrapped. A geometry stage's input block is an array, one element per corner,
+	 * and each member becomes an array of its own ({@code data_in[i].color} to
+	 * {@code of_DATA_color[i]}): that stage is never bound, but a device without geometry shaders
+	 * folds a pass-through one into the fragment stage, and the fold reads varyings and not
+	 * blocks. Eclipse's terrain passes its corners that way and lost its terrain program to the
+	 * block. Left whole: any other block declared as an array, which only a tessellation stage
+	 * reads and this engine binds none; a {@code patch} block, for the same reason; {@code gl_PerVertex}, the compiler's block and not a pack's; and a block one of
 	 * whose members the pass cannot read, since half a block is worse than the whole one. What is
 	 * not told apart is a local named like the instance whose own field is named like a member,
 	 * which no pack of the corpus writes.
@@ -1849,9 +1923,31 @@ public final class GlslTranslator {
 
 			String instance = null;
 			int end = after;
+			List<Token> corners = List.of();
 			if (this.tokens.get(after).kind() == Kind.IDENTIFIER) {
 				instance = this.tokens.get(after).text();
 				end = this.tokens.significantAfter(after);
+				// A geometry stage reads its inputs one corner at a time, as an array of the
+				// block, and it is the one arrayed block read here: the fold reads that stage.
+				if (end >= 0 && this.tokens.get(end).operator("[") && token.identifier("in")
+						&& this.stage == ProgramStage.GEOMETRY) {
+					int closing = this.tokens.matchingBracket(end);
+					if (closing < 0) {
+						index = close;
+						continue;
+					}
+
+					List<Token> suffix = new ArrayList<>();
+					for (int at = end; at <= closing; at++) {
+						Token piece = this.tokens.get(at);
+						if (!piece.trivia() && piece.kind() != Kind.NEWLINE) {
+							suffix.add(piece);
+						}
+					}
+
+					corners = List.copyOf(suffix);
+					end = this.tokens.significantAfter(closing);
+				}
 			}
 
 			if (end < 0 || !this.tokens.get(end).operator(";")) {
@@ -1914,6 +2010,16 @@ public final class GlslTranslator {
 				declaration.clear();
 			}
 
+			// A member that is an array of its own would become an array of arrays, a shape the
+			// fold does not read either, so such a block stays whole as before.
+			if (!corners.isEmpty() && members.stream().flatMap(member -> member.names().stream())
+					.anyMatch(at -> {
+						int next = this.tokens.significantAfter(at);
+						return next >= 0 && this.tokens.get(next).operator("[");
+					})) {
+				readable = false;
+			}
+
 			if (!readable || !declaration.isEmpty()) {
 				index = close;
 				continue;
@@ -1923,13 +2029,15 @@ public final class GlslTranslator {
 			String prefix = instance == null ? "" : "of_" + this.tokens.get(name).text() + "_";
 			List<String> names = new ArrayList<>();
 			for (BlockMember member : members) {
-				flattenMember(member, storage, carried, prefix, names, insertions);
+				flattenMember(member, storage, carried, prefix, corners, names, insertions);
 			}
 
 			blankCode(start, brace);
 			blankCode(close, end);
-			if (instance != null) {
+			if (instance != null && corners.isEmpty()) {
 				rewriteBlockReads(instance, prefix, names);
+			} else if (instance != null) {
+				rewriteCornerReads(instance, prefix, names);
 			}
 
 			index = close;
@@ -2053,7 +2161,7 @@ public final class GlslTranslator {
 	 * layout on the member is dropped.
 	 */
 	private void flattenMember(BlockMember member, String storage, List<String> carried, String prefix,
-			List<String> names, List<TokenStream.Insertion> insertions) {
+			List<Token> corners, List<String> names, List<TokenStream.Insertion> insertions) {
 		if (member.layoutAt() >= 0) {
 			dropLocationLayout(member.layoutAt());
 		}
@@ -2062,6 +2170,10 @@ public final class GlslTranslator {
 			String name = this.tokens.get(nameAt).text();
 			names.add(name);
 			this.tokens.replace(nameAt, prefix + name);
+			// The block's corner array, handed to each member: in vec4 of_DATA_color[];
+			for (Token piece : corners) {
+				insertions.add(new TokenStream.Insertion(nameAt + 1, piece));
+			}
 		}
 
 		boolean interpolated = member.qualifiers().stream().anyMatch(INTERPOLATION_QUALIFIERS::contains);
@@ -2083,6 +2195,42 @@ public final class GlslTranslator {
 			if (this.tokens.get(at).directive() == null) {
 				this.tokens.blankRange(at, at);
 			}
+		}
+	}
+
+	/**
+	 * {@link #rewriteBlockReads} for a block read one corner at a time: {@code data_in[i].color}
+	 * becomes {@code of_DATA_color[i]}. The instance takes the member's name and the access after
+	 * the bracket is blanked, which puts the index where the flattened array wants it without
+	 * moving a token.
+	 */
+	private void rewriteCornerReads(String instance, String prefix, List<String> members) {
+		for (int index = 0; index < this.tokens.size(); index++) {
+			Token token = this.tokens.get(index);
+			if (token.macroName() || !token.identifier(instance) || fieldAccess(index)) {
+				continue;
+			}
+
+			int open = this.tokens.significantAfter(index);
+			if (open < 0 || !this.tokens.get(open).operator("[")) {
+				continue;
+			}
+
+			int closing = this.tokens.matchingBracket(open);
+			int dot = closing < 0 ? -1 : this.tokens.significantAfter(closing);
+			if (dot < 0 || !this.tokens.get(dot).operator(".")) {
+				continue;
+			}
+
+			int member = this.tokens.significantAfter(dot);
+			if (member < 0 || this.tokens.get(member).kind() != Kind.IDENTIFIER
+					|| !members.contains(this.tokens.get(member).text())) {
+				continue;
+			}
+
+			this.tokens.replace(index, prefix + this.tokens.get(member).text());
+			this.tokens.blank(dot);
+			this.tokens.blank(member);
 		}
 	}
 
@@ -2417,7 +2565,7 @@ public final class GlslTranslator {
 			// naming directive's first identifier.
 			String named = LegacyGlsl.RESERVED_NAMES.get(name);
 			if (named != null && "define".equals(directive)
-					&& !this.macroParameterTokens.contains(index)
+					&& !token.macroParameter()
 					&& this.tokens.callOpener(index) < 0) {
 				this.tokens.replace(index, named);
 				continue;
@@ -2448,10 +2596,10 @@ public final class GlslTranslator {
 		}
 
 		// Inserting shifts every index after it, so the last insertion is made first. It also ends
-		// every position taken before it, insertClosings being the one place that moves a token, so
+		// every position taken before it, as the flattening of interface blocks already did once, so
 		// anything a later pass still has to know about a token is carried on the token, as
-		// Token#macroName is. A position kept across here would be read against somebody else's
-		// token, and the reading pass has no way to notice.
+		// Token#macroName and Token#macroParameter are. A position kept across here would be read
+		// against somebody else's token, and the reading pass has no way to notice.
 		this.tokens.insertClosings(closings);
 	}
 
@@ -3035,7 +3183,7 @@ public final class GlslTranslator {
 		String name = this.tokens.get(first).text();
 		if (SamplerPlan.classify(name) == SamplerPlan.Kind.DEPTH) {
 			this.depthLookups++;
-		} else if (scoped(this.samplerParameters, name, line)) {
+		} else if (this.samplerParameterScopes.covers(name, line)) {
 			this.parameterLookups++;
 		}
 	}
@@ -3119,7 +3267,7 @@ public final class GlslTranslator {
 			}
 		}
 
-		Set<Scoped> proven = provenParameters(pinned, fullScreen && chained.isEmpty());
+		ScopeIndex proven = provenParameters(pinned, fullScreen && chained.isEmpty());
 		int[] lines = this.tokens.lineNumbers();
 		List<Closing> levels = new ArrayList<>();
 
@@ -3150,8 +3298,8 @@ public final class GlslTranslator {
 
 			// The parameter first, because a function may name one after a sampler of the file's
 			// and mean its own inside its body.
-			if (scoped(this.samplerParameters, name, line)) {
-				if (!scoped(proven, name, line)) {
+			if (this.samplerParameterScopes.covers(name, line)) {
+				if (!proven.covers(name, line)) {
 					this.unpinnedParameterLookups++;
 					continue;
 				}
@@ -3183,16 +3331,17 @@ public final class GlslTranslator {
 	 * @param all whether every parameter of a levelled type is proven outright, call sites unread,
 	 *            which is the case of a program drawn over the screen asking for no chain
 	 */
-	private Set<Scoped> provenParameters(Set<String> pinned, boolean all) {
+	private ScopeIndex provenParameters(Set<String> pinned, boolean all) {
 		Set<Scoped> proven = new LinkedHashSet<>();
+		ScopeIndex scopes = new ScopeIndex();
 		if (all) {
 			for (Scoped parameter : this.samplerParameters) {
 				if (!this.unlevelledParameters.contains(parameter)) {
-					proven.add(parameter);
+					scopes.add(parameter.name(), parameter.from(), parameter.to());
 				}
 			}
 
-			return proven;
+			return scopes;
 		}
 
 		// One walk that records where each of these functions is named, rather than a walk of the
@@ -3220,18 +3369,19 @@ public final class GlslTranslator {
 					continue;
 				}
 
-				if (!callsHandOver(parameter, pinned, proven, lines,
+				if (!callsHandOver(parameter, pinned, scopes, lines,
 						sites.getOrDefault(parameter.function(), List.of()))) {
 					continue;
 				}
 
 				proven.add(parameter.scope());
+				scopes.add(parameter.scope().name(), parameter.scope().from(), parameter.scope().to());
 				pending.remove();
 				grew = true;
 			}
 		}
 
-		return proven;
+		return scopes;
 	}
 
 	/** Where each of these names is written, in the order the tokens run. */
@@ -3260,7 +3410,7 @@ public final class GlslTranslator {
 	 *              this used to walk the whole list for
 	 */
 	private boolean callsHandOver(SamplerParameter parameter, Set<String> pinned,
-			Set<Scoped> proven, int[] lines, List<Integer> sites) {
+			ScopeIndex proven, int[] lines, List<Integer> sites) {
 		boolean called = false;
 		for (int index : sites) {
 			Token token = this.tokens.get(index);
@@ -3295,8 +3445,8 @@ public final class GlslTranslator {
 
 			String name = this.tokens.get(argument).text();
 			int line = lines[argument];
-			boolean handed = scoped(this.samplerParameters, name, line)
-					? scoped(proven, name, line)
+			boolean handed = this.samplerParameterScopes.covers(name, line)
+					? proven.covers(name, line)
 					: pinned.contains(name);
 			if (!handed) {
 				return false;
@@ -5174,16 +5324,16 @@ public final class GlslTranslator {
 				parameterTypes.add(index);
 				parameterNames.addAll(introduced);
 			} else if (bindable) {
-				this.hardwareComparisonSamplers.addAll(introduced);
+				addScoped(this.hardwareComparisonSamplers, this.hardwareComparisonScopes, introduced);
 			} else {
 				this.tokens.replace(index, plain);
-				this.comparisonSamplers.addAll(introduced);
+				addScoped(this.comparisonSamplers, this.comparisonScopes, introduced);
 				this.retypedSamplers.addAll(introduced);
 			}
 		}
 
 		if (!this.hardwareComparisonSamplers.isEmpty()) {
-			this.hardwareComparisonSamplers.addAll(parameterNames);
+			addScoped(this.hardwareComparisonSamplers, this.hardwareComparisonScopes, parameterNames);
 
 			return;
 		}
@@ -5192,7 +5342,7 @@ public final class GlslTranslator {
 			this.tokens.replace(index, withoutComparison(this.tokens.get(index).text()));
 		}
 
-		this.comparisonSamplers.addAll(parameterNames);
+		addScoped(this.comparisonSamplers, this.comparisonScopes, parameterNames);
 	}
 
 	/**
@@ -5236,7 +5386,7 @@ public final class GlslTranslator {
 			if (name >= 0 && this.tokens.get(name).kind() == Kind.IDENTIFIER) {
 				Scoped parameter = new Scoped(this.tokens.get(name).text(), lines[index],
 						lines[this.tokens.functionEnd(parameters)]);
-				this.samplerParameters.add(parameter);
+				addScoped(this.samplerParameters, this.samplerParameterScopes, List.of(parameter));
 				if (!levelled(token.text())) {
 					this.unlevelledParameters.add(parameter);
 				}
@@ -5579,23 +5729,23 @@ public final class GlslTranslator {
 	 * after the other, and a rewrite of the first would not compile.
 	 */
 	private boolean comparisonAt(String name, int line) {
-		return scoped(this.comparisonSamplers, name, line);
+		return this.comparisonScopes.covers(name, line);
 	}
 
 	/** The same question for the comparison samplers that kept their spelling. */
 	private boolean hardwareComparisonAt(String name, int line) {
-		return scoped(this.hardwareComparisonSamplers, name, line);
+		return this.hardwareComparisonScopes.covers(name, line);
 	}
 
-	/** Whether one of these names means what the list says it does on this line. */
-	private static boolean scoped(Collection<Scoped> names, String name, int line) {
-		for (Scoped scoped : names) {
-			if (scoped.name().equals(name) && line >= scoped.from() && line <= scoped.to()) {
-				return true;
-			}
+	/**
+	 * Adds names to a list and to the index that answers for it, which is the only way either is
+	 * added to: a name in one and not in the other would make the question and the report disagree.
+	 */
+	private static void addScoped(List<Scoped> list, ScopeIndex index, Collection<Scoped> added) {
+		list.addAll(added);
+		for (Scoped one : added) {
+			index.add(one.name(), one.from(), one.to());
 		}
-
-		return false;
 	}
 
 	/**

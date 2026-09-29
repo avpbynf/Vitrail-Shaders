@@ -1,0 +1,80 @@
+--- goldberg-reduced.fsh (FRAGMENT) ---
+#version 460 core
+#define <engine defines>
+layout(std140) uniform OfGlobals {
+	float frameTimeCounter;
+};
+uniform sampler2D noisetex;
+float ofReducedSin(float ofX) { float ofK = floor(ofX * 0.15915494); float ofR = ofX - ofK * 6.28125 - ofK * 1.9353072e-3; ofR -= 6.2831855 * step(3.1415927, ofR); float ofS = sign(ofR); float ofA = 1.5707964 - abs(abs(ofR) - 1.5707964); float ofZ = ofA * ofA; return clamp(ofS * ofA * (1.0 + ofZ * (-1.6666654611e-1 + ofZ * (8.3321608736e-3 + ofZ * (-1.9515295891e-4)))), -1.0, 1.0); }
+float ofReducedCos(float ofX) { return ofReducedSin(ofX + 1.5707964); }
+vec2 ofReducedSin(vec2 ofX) { vec2 ofK = floor(ofX * 0.15915494); vec2 ofR = ofX - ofK * 6.28125 - ofK * 1.9353072e-3; ofR -= 6.2831855 * step(3.1415927, ofR); vec2 ofS = sign(ofR); vec2 ofA = 1.5707964 - abs(abs(ofR) - 1.5707964); vec2 ofZ = ofA * ofA; return clamp(ofS * ofA * (1.0 + ofZ * (-1.6666654611e-1 + ofZ * (8.3321608736e-3 + ofZ * (-1.9515295891e-4)))), -1.0, 1.0); }
+vec2 ofReducedCos(vec2 ofX) { return ofReducedSin(ofX + 1.5707964); }
+vec3 ofReducedSin(vec3 ofX) { vec3 ofK = floor(ofX * 0.15915494); vec3 ofR = ofX - ofK * 6.28125 - ofK * 1.9353072e-3; ofR -= 6.2831855 * step(3.1415927, ofR); vec3 ofS = sign(ofR); vec3 ofA = 1.5707964 - abs(abs(ofR) - 1.5707964); vec3 ofZ = ofA * ofA; return clamp(ofS * ofA * (1.0 + ofZ * (-1.6666654611e-1 + ofZ * (8.3321608736e-3 + ofZ * (-1.9515295891e-4)))), -1.0, 1.0); }
+vec3 ofReducedCos(vec3 ofX) { return ofReducedSin(ofX + 1.5707964); }
+vec4 ofReducedSin(vec4 ofX) { vec4 ofK = floor(ofX * 0.15915494); vec4 ofR = ofX - ofK * 6.28125 - ofK * 1.9353072e-3; ofR -= 6.2831855 * step(3.1415927, ofR); vec4 ofS = sign(ofR); vec4 ofA = 1.5707964 - abs(abs(ofR) - 1.5707964); vec4 ofZ = ofA * ofA; return clamp(ofS * ofA * (1.0 + ofZ * (-1.6666654611e-1 + ofZ * (8.3321608736e-3 + ofZ * (-1.9515295891e-4)))), -1.0, 1.0); }
+vec4 ofReducedCos(vec4 ofX) { return ofReducedSin(ofX + 1.5707964); }
+float ofHash(vec2 ofP) { uvec2 ofV = floatBitsToUint(ofP); uint ofN = (ofV.x * 1597334677u) ^ (ofV.y * 3812015801u); ofN ^= ofN >> 16u; ofN *= 2246822519u; ofN ^= ofN >> 13u; ofN *= 3266489917u; ofN ^= ofN >> 16u; return float(ofN) * 2.3283064365386963e-10; }
+float ofHash(vec3 ofP) { uvec3 ofV = floatBitsToUint(ofP); uint ofN = ofV.x ^ (ofV.y * 1597334677u) ^ (ofV.z * 3812015801u); ofN ^= ofN >> 16u; ofN *= 2246822519u; ofN ^= ofN >> 13u; ofN *= 3266489917u; ofN ^= ofN >> 16u; return float(ofN) * 2.3283064365386963e-10; }
+layout(location = 0) out vec4 ofFragData0;
+void ofOrderOutputs() { ofFragData0; }
+
+
+
+
+in vec2 texcoord;
+
+float hash12(vec2 p) {
+	return ofHash(p);
+}
+
+float hash13(vec3 p) {
+	return ofHash(p);
+}
+
+float grain(vec2 p) {
+	return fract(ofReducedSin(dot(p, vec2(12.9898, 78.233 * frameTimeCounter))) * 43758.5453);
+}
+
+float other(vec2 p) {
+	return fract(ofReducedSin(dot(p, vec2(1.0, 2.0))) * 100.0);
+}
+
+void main() { ofOrderOutputs();
+	float n = hash12(texcoord) + hash13(vec3(texcoord, 1.0)) + grain(texcoord) + other(texcoord);
+	ofFragData0 = vec4(vec3(n * 0.25), 1.0);
+}
+--- notes ---
+fragmentOutputs = 1
+dynamicFragData = 0
+uniformConflicts = 0
+shadowCalls = 0
+unwrappedShadow = 0
+strippedExtensions = 0
+depthEpilogue = 0
+alphaEpilogue = 0
+coverage = 0
+depthLookups = 0
+parameterLookups = 0
+pinnedLookups = 0
+unpinnedParameterLookups = 0
+fragCoordZ = 0
+fragCoordXyz = 0
+fragCoordUnhandled = 0
+fragDepthWrites = 0
+fragDepthUnhandled = 0
+conflictNames = []
+comparedSamplers = []
+hardwareCompared = []
+retypedSamplers = []
+storageBlocks = []
+volumeLookups = 0
+volumesLeftAlone = 0
+trigCalls = 2
+gameTextureMatrix = 0
+gameModelView = 0
+--- drawBuffers ---
+[]
+--- block ---
+float frameTimeCounter
+--- samplers ---
+sampler2D noisetex

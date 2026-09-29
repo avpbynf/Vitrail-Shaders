@@ -9,6 +9,10 @@ That single fact decides most of what follows, and it decides the biggest thing 
 screen is the reference's screen, ported rather than approximated.** The lists, the cells, the
 gestures, the panels, the buttons and the texture they are drawn from all come from it. Where this
 document says the reference behaves some way, that is not a comparison; it is the specification.
+One thing is the engine's own rather than the reference's: the settings no page names, which the
+`*` token gathers and which are the whole of the one page a pack without a `screen=` line gets,
+come in the order the pack's shaders declare them and not the order the reference lists them in
+([the pack format](pack-format.md) has the rule).
 
 Open it from the video settings, where it sits under the mod's own name in the list of pages, with
 the key bound in the game's controls (`I` by default), or from wherever else you reached the mod's
@@ -140,6 +144,16 @@ pack. Emptying is what lets somebody watching the file see it go blank.
   sense in importing two.
 
 Either way the line under the title says what happened, for five seconds.
+
+**A folder arrives whole or not at all.** It is copied under a hidden name beside where it goes,
+`.<name>.part`, and renamed into place once every file is there; a copy that fails is removed, and
+one a crash cut short is cleared by the next drop of the same folder. Copied straight into place, a
+failure half way left a pack with files missing in the list and every later drop was told the pack
+already existed. The list leaves that one shape out and not every name that opens on a dot, which
+would take away a pack somebody simply named that way. **A link inside the folder is copied as a
+link**, not as what it points at: followed, a link out of the folder would become a plain file of
+the pack, and the loader's refusal to read through a link that leaves a folder pack would have
+nothing left to refuse.
 
 ## The folder is watched, the pack is not
 

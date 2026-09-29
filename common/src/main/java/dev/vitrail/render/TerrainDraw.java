@@ -1023,7 +1023,8 @@ public final class TerrainDraw {
 			}
 
 			this.programs = TerrainProgram.build(this.loaded, this.values, this.load, format,
-					this.plan, this.chainTargets, this.chainRuns, this.targets);
+					this.plan, this.chainTargets, this.chainRuns, this.targets,
+					this.owner.blocks());
 			// With the map it answers out of. A pipeline that outlived a rebuild would otherwise be
 			// answered with the program of the map before it.
 			this.lastBound = null;

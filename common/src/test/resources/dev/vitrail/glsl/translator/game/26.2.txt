@@ -1,0 +1,6 @@
+layout(std140) uniform DynamicTransforms {
+	mat4 of_GameModelView;
+	vec4 of_GameColorModulator;
+	vec3 of_GameModelOffset;
+	mat4 of_GameTextureMatrix;
+};

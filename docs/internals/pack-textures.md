@@ -48,12 +48,19 @@ A shader pack is a file someone downloaded, and a texture directive is a line of
 file to open. Such a path is exactly as untrusted as an include specification, and it reaches the
 same filesystem.
 
-Two things have to be true of it before anything opens it. It has to be **normalised**, so that the
-segments meaning "go up a level" are resolved rather than carried along; and the result has to be
-**confined**, checked to still sit inside the pack's shader root after that normalisation. Without
-both, a path that climbs out of the pack has the engine read a file the game process can reach and
-hand its bytes to a shader as a picture. That is an arbitrary read driven by downloaded content, and
-it happens while the client is still starting up.
+Two things have to be true of it before anything opens it, and a folder pack has a third, given
+after them. It has to be **normalised**, so that the segments meaning "go up a level" are resolved
+rather than carried along; and the result has to be **confined**, checked to still sit inside the
+pack's shader root after that normalisation. Without both, a path that climbs out of the pack has
+the engine read a file the game process can reach and hand its bytes to a shader as a picture. That
+is an arbitrary read driven by downloaded content, and it happens while the client is still starting
+up.
+
+In a pack kept as a folder the normalised text is not enough on its own, because the read that
+follows it follows a link: a folder linked out of the pack reads whatever lies under it however
+tidy the path naming it looks. So a folder pack's path is also resolved to where it really lands,
+links followed, and refused unless that is inside the pack's own folder, which is the same refusal
+as a climb with dots and reads black the same way. A zip has no links to follow.
 
 The parade is not a check but a **single resolution road**. Texture paths go through the same
 resolution an include takes, rather than being given one of their own, because a second road has to
@@ -92,7 +99,12 @@ named rather than silently accommodated.
 The ordering is what keeps the fallback harmless: confinement is decided on the normalised path
 first, so the fallback only ever lists the parent of a path already inside the pack. Placed before
 the check, it would be a second and weaker resolution road, which is the very thing the single-road
-rule exists to prevent.
+rule exists to prevent. The one confined path whose parent lies outside the shader root is that root
+itself, and the fallback is never asked about it: a path naming the root is never a file, and the
+listing of its parent is the pack's own root, where a file beside `shaders/` called `SHADERS` would
+otherwise answer a texture key of `.`. In a folder pack what the listing finds is confined once more
+before it is handed back: it is another file than the one checked, and a name in another case can be
+a link out of the pack where the name the directive wrote was nothing at all.
 
 ## A cap on the file does not cap the decode
 
@@ -184,8 +196,11 @@ exactly as an honoured one would.
 
 ## A volume becomes an atlas of slices
 
-This backend binds two-dimensional and cube samplers and nothing else, and the refusal is on the
-**declared type**. That distinction is what makes the mechanism both necessary and possible.
+For what a pack ships as a file, this backend binds two-dimensional and cube samplers and nothing
+else, and the refusal is on the **declared type**. That distinction is what makes the mechanism
+both necessary and possible. A declared one- or three-dimensional sampler is the exception, bound
+by a mixin that makes the compiler read it as two-dimensional, and [translation](../translation.md)
+says what is still refused.
 
 To be exact about what "two-dimensional" means here: the check is on *dimensionality*, so the
 shadow, array and multisample spellings all carry the same two dimensions and pass it. The
@@ -198,7 +213,8 @@ as a symptom.
 Necessary, because the compiler's reflection lists a module's whole resource list: a
 three-dimensional sampler declared in a shared include and never sampled costs the program its
 pipeline exactly as one read on every pixel does. Supplying a genuine volume would not help either,
-since the type is the refusal.
+since nothing builds a three-dimensional view over a texture a pack ships; what a declared volume
+does bind is in [translation](../translation.md).
 
 Possible, because nothing inspects what actually sits behind the sampler. So the volume's slices are
 laid out on a two-dimensional atlas, as square as they go; the declaration is rewritten to a
@@ -225,7 +241,7 @@ pack file and checked against the length its declaration announces, but the atla
 texels are laid out *as*: a declared shape with one long axis and a thin one lays its slices out in
 a line, so a modest file spreads to a width no device will allocate and that nothing in the file
 said. The layout is therefore checked against a limit per side and against a ceiling on the memory
-it would take, counted in bytes because a texel is four to eight of them, before the volume is
+it would take, counted in bytes because a texel is four to sixteen of them, before the volume is
 served; one that does not fit refuses the directive by name like any other refusal.
 
 **Nothing moves unless everything can.** A name reached in any way other than the plain lookup the

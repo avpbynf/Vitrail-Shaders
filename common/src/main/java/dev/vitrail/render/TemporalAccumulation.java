@@ -1,5 +1,6 @@
 package dev.vitrail.render;
 
+import dev.vitrail.render.timing.FrameCensus;
 import dev.vitrail.Vitrail;
 
 import com.mojang.blaze3d.GpuDeviceLossException;
@@ -315,7 +316,9 @@ public final class TemporalAccumulation {
 		// hand the clamp a neighbourhood of whatever the driver left. One frame of the scene alone.
 		float weight = this.primed ? NEW_WEIGHT : 1.0F;
 
+		FrameCensus.rotated();
 		this.block.rotate();
+		FrameCensus.chainBlockWritten();
 		try (GpuBufferSlice.MappedView mapped = this.block.currentBuffer().map(false, true)) {
 			Std140Builder.intoBuffer(mapped.data())
 					.putVec2(1.0F / width, 1.0F / height)

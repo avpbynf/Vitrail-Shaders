@@ -113,6 +113,10 @@ public final class EngineStages {
 		if (!TranslationCache.installed()) {
 			Vitrail.logger().warn("No translation cache this run, so every pack load translates "
 					+ "from scratch: {}", TranslationCache.problem());
+		} else if (!TranslationCache.problem().isEmpty()) {
+			// An installed cache has a problem of its own to report, another build's folder it could
+			// not wholly empty, and this is the one place that has a logger to say it with.
+			Vitrail.logger().warn("The translation cache is on, but {}", TranslationCache.problem());
 		}
 	}
 

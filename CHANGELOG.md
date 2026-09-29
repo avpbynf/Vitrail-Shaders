@@ -11,6 +11,186 @@ publishing a jar named after one thing and built from another.
 Everything is a pre-release while the version stays under `1.0.0`. Nothing here is a promise about
 what the next one holds.
 
+## Unreleased
+
+### Changed
+
+- **A pack's entity shaders are made once each, not once for every piece of an entity.** On
+  Complementary and Photon the entities, from mobs and armour to the glint on an enchanted item,
+  are drawn by some 140 programs that use only a few dozen different shaders between them, and
+  Vitrail made each program its own copy of both of its shaders, compiling it or reading it back
+  from the shader cache on disk. It now makes each shader once when the pack loads and hands the
+  other programs a copy from memory, which is about a fifth of the entity shader work a load did.
+  With the shader cache switched off that is compiles saved, and with it on it is file reads saved.
+  Nothing about the picture changes.
+- **Reading a pack's shader files takes about half the time.** Before a pack can draw, Vitrail
+  reads each of its shader files and pastes in the shared files they include, which is part of the
+  wait before the picture appears when you choose a pack, apply a setting or step through a portal.
+  On a large pack built for the measurement, of 400 programs, that reading now takes about half the
+  processor time it did and leaves about a quarter of the throwaway memory for the game to clear up
+  afterwards. Nothing about the picture changes.
+- **The largest shaders are translated about five times faster.** Vitrail rewrites each of a
+  pack's shaders into the form the game's renderer compiles, and on a very large one that work grew
+  far faster than the shader did. A shader of some 80,000 lines took nearly two seconds and now
+  takes under four tenths of one; smaller ones gain less. It is felt most on the first load of a
+  pack, since the translations are kept on disk after that. Nothing about the picture changes.
+
+### Fixed
+
+- **Bliss-based packs draw again, Eclipse among them.** Three things refused them, each on its
+  own enough to turn the whole pack off:
+  - A pack may keep data in a one dimensional image. Bliss keeps a line of block data that way,
+    and the game's shader checks refused every program reading it, the pack's composites among
+    them. One dimensional images now pass those checks, as three dimensional ones already did.
+  - A pack may define a macro twice with different bodies, which NVIDIA's driver accepts and the
+    compiler Vitrail uses does not. Eclipse's composite2 does it with `diagonal3`. Each use now
+    gets the body in force where it stands, which is the driver's reading.
+  - A geometry stage that only passes each corner on is folded into the stage after it on a Mac.
+    Eclipse's terrain writes that stage in a shape the fold did not read (a block of varyings read
+    one corner at a time, a counter declared ahead of its loop, the position held in a local), so
+    the pack's terrain program was set aside and the terrain drawn without it. It is folded now.
+- **A held item no longer streaks while the player walks, on a Mac.** Under Photon the item in hand
+  carried short light dashes, one column every 32 pixels, for as long as the walk bob kept it
+  moving. Vitrail puts the game's own picture wherever something the game drew stands in front of
+  the pack's geometry, and it tells the two apart by comparing the depth the pack's fragment stage
+  saw with the depth the GPU stored. On a Mac the two can differ by a unit in the last place on
+  some pixels of a sloped surface, so those pixels read as covered and got the game's colour in
+  place of the pack's gbuffer. A difference that small no longer counts as something in front.
+- **Enchanted items and armour are drawn by the shader pack on 26.3.** 26.3 draws an enchanted item,
+  armour piece, trident or shield together with its glint in one pass, a kind of pass Vitrail did not
+  know. So these were drawn by the game and pasted into the pack's image. Under Complementary they
+  looked unshaded. Under Photon they became a purple smear, and a held pickaxe lost its own colours.
+  While a pack is loaded, Vitrail now splits them back into the piece and its glint, as 26.2 drew them.
+  The pack lights the piece and draws the glint with its own glint program. Without a pack the game
+  draws them as before.
+- **The sky no longer turns one flat pink when far terrain is loaded and none of it is in view.**
+  With Distant Horizons, or a mod standing in for it, a pack is told there is far terrain and reads
+  its depth. On a frame where none of it is on screen, such as looking at the sky from above the
+  world's build height, Vitrail handed that depth over as a single texel. Photon reads it pixel by
+  pixel, found far terrain at the camera everywhere past that texel, and painted the whole view in
+  one pinkish colour. The depth is now the far plane across the whole screen, as the mod's own
+  image is under Iris.
+- **The cracks over a block being mined show again under a shader pack on 26.3.** 26.3 draws the
+  cracks over an opaque block at a different moment of the frame from 26.2. Vitrail only looked for
+  them at the old moment, so the game drew them on its own picture, which the pack's image covers.
+  Stone, wood or dirt showed no cracks while mined, and only glass kept them. While a pack is loaded,
+  they are now sent to the moment 26.2 used, and the pack draws them with its own program.
+- **The cracks over a block being mined show under a shader pack on Fabric too, on 26.3.** Fabric
+  API's renderer module, of which Sodium carries a copy, submits them through a method of its own in
+  place of the game's, and Vitrail sent only the game's to the moment 26.2 used. So on Fabric stone,
+  wood and dirt still showed no cracks while mined, and only glass kept them. Both methods are sent
+  there now. NeoForge, which has no such module, is unchanged.
+- **A pack's own `min`, `max` and long `if` read every value they are given.** A custom uniform
+  written as `min(a, b, c)`, or as a `max` of three values or more, compared the first value with
+  the second over and over and never looked at the rest, so it could come out wrong. And the last
+  value of an `if(cond, value, cond2, value2, fallback)` was worked out once for every condition
+  that failed, so a `smooth()` written there faded several times faster than the pack asked. Both
+  now work as in OptiFine.
+- **Two calls of one function in a pack's own vector uniform keep their own answers.** In a custom
+  uniform such as `abs(a) + abs(b)` over vectors, the second `abs` wrote its answer over the first
+  before the two were added, so the sum came out as twice the second one. The same went for `+`,
+  `-`, `*`, `/`, `floor`, `ceil`, `min`, `max` and `clamp` on vectors, and for sums of integer
+  vectors. Each call now keeps its answer apart.
+- **A pack's own uniform may call `round()`.** OptiFine lists it among the functions a custom
+  uniform may use, and Vitrail did not know it, so a uniform that called it was dropped and named
+  in the log. It now rounds as OptiFine does, a half going up: `round(1.5)` is 2 and `round(-1.5)`
+  is -1.
+- **A pack's own uniform may compare two vectors.** `equal(a, b)` over two vectors, and `a == b`
+  or `a != b` written between them, could not be worked out, so a uniform that compared vectors
+  was dropped and named in the log. They now answer true or false, as the same comparison of two
+  numbers does.
+- **A pack's own uniform nested thousands of levels deep no longer crashes the game as the pack
+  loads.** Working one out used up the stack, an error nothing on that road recovered from. A
+  uniform nested more than 128 levels deep, far past anything a pack is known to write, is now
+  dropped and named in the log, and the pack loads without it.
+- **`&&` binds tighter than `||` in a pack's own uniforms, as in OptiFine.** A custom uniform
+  written as `a || b && c` was read left to right, as `(a || b) && c`, where OptiFine, and the
+  GLSL the same pack is written in, read it as `a || (b && c)`. It is now read as they read it.
+  None of the packs Vitrail is usually tried with writes the two together without brackets.
+- **A pack folder can no longer read files outside itself through a link.** A pack kept as a
+  folder can carry a link to somewhere else on the disk, and unzipping a pack on a Mac or on Linux
+  keeps any link it was packed with. An include or a texture path that went through such a link
+  read whatever the link led to, anywhere the game could reach. It is now refused as a path that
+  climbs out of the pack with `..` is: the include is not found and the texture reads black. A
+  link from one folder of a pack to another of the same pack still works, and a pack in a .zip was
+  never affected.
+- **A pack made to fill the memory is refused instead of crashing the game.** Each file of a pack
+  was held to eight megabytes, but nothing held the pack as a whole, so a small zip of many files
+  that each unpack to eight megabytes could make Vitrail read gigabytes of text and run the game
+  out of memory. A pack is now refused with a message saying so once it holds more than 64 MB of
+  text or more than 20,000 files and folders. Real packs are far below both: the largest ones hold
+  a few megabytes of text in under a thousand files.
+- **A pack's defines can no longer freeze the game or run it out of memory.** A setting defined as
+  a sum of many others, each of those a sum of many more, was worked out again wherever it was met,
+  so four levels of it could hold the game for minutes behind a single `#if`, and the same shape
+  in a properties file could grow one line to gigabytes. A condition that takes more than a
+  thousand names to work out is now treated as true, as any condition Vitrail cannot work out
+  already is, and a line stops growing before it passes 256 KB. No real pack comes near either.
+- **A pack's settings that could not be saved leave nothing behind.** The settings file is written
+  beside itself first, as a `.part`, and moved into place, and a save that failed left that `.part`
+  in the shaderpacks folder for good. It is now removed, as Vitrail already did for `pack.txt`.
+- **A pack folder dropped onto the pack list arrives whole or not at all.** It was copied file by
+  file straight into the shaderpacks folder, so a copy that failed part way left a pack with files
+  missing in the list, and every later drop of the same folder was refused as already there. The
+  folder is now copied aside and put in place once all of it is there, and a copy that fails
+  leaves nothing, so the drop can simply be tried again. A link inside the folder is copied as a
+  link, so one that leads out of the pack stays refused rather than becoming a file of it.
+- **A macro written below an `in` or `out` block no longer costs its program.** A pack that
+  declares such a block and, further down, a macro taking a parameter called `texture`, `sampler`
+  or `image` had the parameter renamed while its use inside the macro kept the old name, so the
+  shader named something it never declared and the program was refused. The macro is now kept as
+  the pack wrote it.
+- **A full-screen pass that picks its GLSL version under a conditional is read by the version it
+  picked.** Vitrail went by the last version line in the file, even one on a branch that is not
+  taken, and that line decides whether `vaPosition` is a corner of the screen or a constant. A pack
+  whose chosen version was a core one and whose other one was not had every corner of the pass
+  placed at one point, and the pass drew nothing.
+- **An old cache folder that cannot be deleted no longer turns the caches off.** Vitrail keeps
+  compiled shaders and translated programs on disk so a pack loads faster the second time, and at
+  launch it deletes the folders an earlier version left behind. If one file in those old folders
+  could not be deleted, because an antivirus or a file indexer had it open or it was marked
+  read-only, the whole cache was turned off, and every pack load compiled everything from scratch
+  at every launch until the file went. Now the cache stays on, whatever can go is deleted, and
+  the next launch tries again with the rest.
+- **A pack whose storage buffers run out of graphics memory is no longer drawn with some of them
+  missing.** Complementary Reimagined's world space reflections ask for a buffer of hundreds of
+  megabytes. When the memory ran out partway through a pack's buffers, the pack was set aside at
+  that window size as it should be, but the buffers made before the failure were kept, and at the
+  next size the pack was drawn with those alone: the rest were bound as a small stand-in of the
+  wrong kind, which a graphics driver may answer with a wrong picture, a hang or a crash. A failure
+  now gives every buffer back, so the next size asks for the whole set again.
+- **A version of Distant Horizons that Vitrail cannot read no longer stops the game.** Vitrail reads
+  a few of that mod's own classes by name to place the far terrain for a pack. Every read already
+  answered a version it could not make sense of by leaving the far terrain flat, except the very
+  first, which let the error through when those classes failed as they loaded. It now leaves the
+  far terrain flat as well, and says so once in the log.
+- **The settings a pack does not place itself keep their order from one start to the next.** A
+  page built from the pack's `*` token, and the one page a pack without a `screen=` line gets,
+  listed their settings in an order that changed every time the game started. They now come in
+  the order the pack's shaders declare them, which stays put, although it is not the order Iris
+  lists them in.
+- **Distant Horizons' far water comes back when the shaders are turned off.** A pack asks that
+  mod to hold its water back for the pack's own water pass, and turning the pack off hands it
+  back. A pack turned off before any far terrain had been drawn, or one that could not take the far
+  terrain over, left it held back, and with no pack there is nothing to draw it: the far water
+  was gone for the rest of the session. It is handed back whenever a pack is turned off now.
+- **One pack program that cannot be set up no longer takes others down with it.** When one of a
+  pack's entity programs could not be set up, over a uniform whose size Vitrail does not know for
+  instance, every entity program after it was lost too: the hand, the enchantment glint and the
+  shadows mobs cast went back to the game's own shaders, and the mobs were left lit partly by the
+  pack and partly by the game. Now only the group that program belongs to goes back to the game,
+  whole, with an error in the log naming it, and the rest is drawn by the pack. The sky goes back
+  whole rather than piece by piece, the opaque and the translucent particles are set up apart, and
+  a half of Distant Horizons' far terrain that cannot be set up sends the whole far terrain back to
+  Distant Horizons instead of leaving one half to each.
+- **Programs of a pack that could not be read in the background are named.** The sky, the entities
+  and the hand, the clouds, the weather, the particles and Distant Horizons' far terrain are read
+  in the background once a world is joined, and nothing reads them anywhere else. When that
+  reading stopped early, whatever it had not reached was drawn by the game's own shaders with a
+  single line in the log to say the reader had stopped, which on screen looks like the pack's own
+  choice. The settings screen now names what was left to the game, in red, and the log names it as
+  an error.
+
 ## 0.12.0-beta
 
 ### Added

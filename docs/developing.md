@@ -67,8 +67,44 @@ By family, so you can tell whether a change is in scope:
 
 Two of those need no corpus: the uniform block invariants and path confinement. Everything else
 wants one. None of them run on a bare clone even so, since the harness that drives them is the one
-absent above, and what `check` adds to a compile is the text rule and the unit tests that need no
-pack, one of which holds the game's transforms block to the include the game ships.
+absent above.
+
+What a bare clone does run is `check`: the text rule and the unit tests. Those build every input
+themselves, small and synthetic, so they need no pack and no game process. The few that read the
+game's own includes or build its own types only need its jar on the classpath, which the build
+already has, and none of them starts a device. They are a smaller net than the corpus and not a
+substitute for it, and they follow the same families wherever a synthetic input can stand in for a
+pack:
+
+- **Pack reading.** `shaders.properties`, include expansion and path confinement over directory and
+  zip packs built in a temporary folder; the option scan and its rewriting; the settings menu; the
+  name grammars of the model; the raw texture layouts; the settings files a player's game directory
+  holds.
+- **Translation.** A golden corpus of stages compared byte for byte, with the game's own transform
+  block recorded once per game so that one set serves both; the lexer, the token list, the
+  translated-program codec and the translation cache on disk.
+- **Colour targets and the frame chain.** The plan held to the parity rule above, pass by pass,
+  against a second reading written from that sentence and not from the classes, over seeded random
+  chains as well as hand-worked packs.
+- **Uniforms.** The block against a textbook std140 layout, the coercions, the clip-space
+  conversion against an independent projection, the values a pack reads against double precision
+  arithmetic, and the expression language.
+- **What in `render/` and `sodium/` is arithmetic or a decision and needs no device.** The view and
+  shadow matrices, the camera shift, the frame clock, motion vectors, the render scale, the shadow
+  distance arbitration, the swept shadow volume and the tangent frame of a chunk mesh, the cuts a
+  frame is divided into, and the catch every frame hook ends in.
+- **The Distant Horizons bridge**, against a fake of the mod that the test compiles itself, so it
+  needs a JDK and not only a JRE.
+- **What sits beside those**: the module store both games share and the translation cache on disk,
+  the frame and module census, the material-map mip reduction, the block-origin word of a chunk
+  vertex, the pack-reading limits and the macro work budget, the refusals a family answers with,
+  and the settings files a game directory holds. The list above names families and not test
+  classes: a class under `common/src/test` says in its own javadoc which rule it holds.
+
+Two habits carry over from the section below. A test that pins a defect is named for it
+(`knownBug_...`) and is kept apart from the ordinary ones, so the fix flips one method rather than
+a file. And a check that has never failed proves nothing: the assertions that matter here were
+broken once on purpose, in the code they guard, and seen to fire before they were kept.
 
 ## What makes a measurement trustworthy
 
@@ -315,6 +351,72 @@ property is absent. A reading is only as good as the run around it: compare runs
 state, and remember that the game lowers its own frame rate after a while without input (the
 inactivity limit in the video settings), which moves every per-second number and none of the
 per-pass milliseconds.
+
+**What a frame binds, pushes and writes is counted under that table.** The same switch prints a
+`Frame census over N s` block after each pass table, every figure an average over the frames of the
+window, and it counts calls where the table above times them, so it needs no answer from the card
+and is the same number twice. Pipeline binds are counted where the pass takes them, whoever made the
+call, so the game's and Sodium's are in it beside this engine's, in a row of their own; a bind is
+*redundant* when the pass already held that pipeline, and nought is the number to want. Draws are
+counted the same way and filed under the family of the pipeline their pass holds. **Terrain draws are
+the one gap and it shows as a dash**: Sodium records them into the command buffer itself, past the
+pass. Descriptor pushes are counted at the game's push, with the descriptors each carried, and a
+push bound as an allocated set instead is named apart. Program binds are the times a geometry
+program's block and samplers were set on a pass it was not already standing in, and beside them the
+binds that found it standing there, which set only the images the draw brought. Both games mark the
+descriptors dirty on every set, so a draw whose bind set an image pushes, and one whose bind set
+nothing pushes only if something else on it did. A line of its own counts the sets that changed
+nothing, where the pass already held that block, image or transform block as it was last set, split
+by what was set and over the sets of that kind; nought is the number to want, and the block and the
+images are counted only where the bind found its program already standing in the pass, the others
+writing every name the program declares. Uniform block writes are split into the geometry programs',
+the chain's and the far terrain's, and the geometry line says how many programs wrote their block
+more than once in a frame, which is nought when the block is written once for the run of draws it
+serves. A geometry program's block is written once for each turn of its ring and version of the
+frame's values, and again only where its pass hands in another matrix or colour, as the hand and the
+sky's elements do, so a program still counted on that line was drawn under two different sets of
+them, or straddles a turn of its ring, and did not write the same bytes twice. Every ring turned by
+this engine is a fence created and is counted as one. The census costs one read of a static final
+per hook while the switch is off, and allocates nothing while it is on. It says how often, not how
+dear: read it beside the frame rate.
+`vitrail/keep-redone-work` puts the redone binds and block writes back, so that one jar gives both
+readings.
+
+**The uniform blocks of a chain, each geometry program's and the one the full screen passes share,
+stand in one ring, which the chain turns once a frame.** A block takes a range of it, at an offset
+the device accepts for a bound block, when it is first to be written, and gives it back when its
+program is released. The ring line therefore counts one turn for all of them, and the line under it
+says how many drawn geometry programs stand in the shared ring and how many in a ring of their own,
+averaged over the frames like the rest: nought of the second is the number to want, and a block that
+finds the ring full, or wider than a buffer of it, is in one of its own and is named once in the log.
+A last line says how many blocks the shared ring holds now and how many of its bytes, and the log
+carries the ring's size when it is made and the most it held when the load ends.
+`-Dvitrail.ringPerProgram=true`, or a file `vitrail/ring-per-program` beside the pack, gives every
+block a ring of its own again, so that one jar gives both readings. The bytes a block holds are the
+same in both, and so is the frame.
+
+**How much of a load's module work is one text compiled twice is said once a family, with what the
+compiler did about it beside it.** Under the same switch, the log carries a
+`Module census, <family>:` line per family when the background warm-up closes. It says what the pack
+asked for: how many programs the family built, how many of those are distinct by the text of their
+vertex stage, the text of their fragment stage, the text of a geometry stage the device binds as a
+module of its own, and their mesh layout, and how many distinct vertex and fragment texts they come
+to. And it says what became of the modules those programs asked the game's compiler for: how many
+were compiled, how many the disk cache served, how many were shared within the load, and how many of
+the compiled ones were a repeat, a text some earlier compile of the load had already made. A
+program's modules are named after its table row, so the compiler is asked for every row's copy of a
+text, and `cache/ModuleShare` answers the copies out of memory under the key the disk cache files a
+unit by. The number to want at nought is the repeats, and `-Dvitrail.shareModules=false` among the
+JVM arguments takes the table away, which gives the before of the same jar: the copies are then
+served from the disk cache where there is one, and compiled again where
+`-Dvitrail.moduleCache=false` has switched it off. Compiled is counted where the module cache counts
+the `built by the compiler` of its own line, so the compiled figures of every family, and of the
+last line, which gathers the composites, the computes and the game's own shaders that no program
+owns, add up to that number for the same load. The terrain builds its programs when the renderer
+first asks for its shader, which can be after the warm-up has closed, so its line, and any other
+family's that grew since, comes with the next pass table instead. The texts are hashed where the
+programs are built and never kept: a fraction of a second of the workers' time at load, and nothing
+at all with the switch off.
 
 **The Khronos validation layer reads the whole frame on request.** The game's own
 `--vulkanValidation` argument turns it on wherever the layer is installed, and `glDebugVerbosity:2`

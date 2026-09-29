@@ -44,7 +44,8 @@ Sodium 0.9.2 added a shared geometry arena that does not call the accessor. It b
 stride at construction and then refuses any other width, so a pack's mesh (twenty-four to forty
 bytes) dies with `Unsupported stride` on the first upload. A mixin on that constructor asks the accessor
 instead, at the same instant the section manager is built. 0.9.1 has no such class, and the mixin
-is skipped there.
+is skipped there. The mixin is in the 26.2 build only: Sodium for 26.3 reads
+`ChunkMeshFormats.getCurrent()` in the constructor itself, so no mixin is applied there.
 
 **One thing outlives that rebuild, and it is a pipeline.** The chunk renderer memoises its own
 pipeline in a map keyed by render pass, the map is static and the three passes are immortal, and a
@@ -262,8 +263,9 @@ end it would cost nine tenths.
 Against the two words of signed bytes this replaces, a pack reads a normal four times closer to the
 true one and a tangent up to nine tenths of a degree round the face from where it was, and that
 tangent is now exactly perpendicular to the normal where three rounded bytes left it a few
-thousandths off. The out-of-game harness measures all of it over four hundred thousand frames, which
-is the only witness there is: nothing off the game runs the text that undoes the word.
+thousandths off. The out-of-game harness measures all of it over four hundred thousand frames, and
+`glsl/TangentFrameTest` holds the Java packing and its decode to the bounds it found; the GLSL that
+undoes the word is run by nothing off the game.
 
 One thing the reference does here is not followed, and reproducing it would be reproducing a defect.
 It measures the angle against the normal the quad had, while its own patched shader reads that angle

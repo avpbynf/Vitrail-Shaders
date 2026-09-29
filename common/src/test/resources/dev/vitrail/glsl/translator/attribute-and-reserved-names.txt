@@ -1,0 +1,69 @@
+--- attribute-and-reserved-names.vsh (VERTEX) ---
+#version 460 core
+#define <engine defines>
+layout(std140) uniform OfGlobals {
+	mat4 of_ModelViewProjectionMatrix;
+	vec3 ofSampler;
+	float ofImage;
+	vec4 of_DepthConv;
+};
+uniform sampler2D ofTexture;
+in vec4 of_Vertex;
+in vec4 of_MultiTexCoord0;
+invariant gl_Position;
+
+
+in vec4 mc_Entity;
+in vec4 at_tangent;
+
+
+
+out vec4 tangent;
+out float blockId;
+out vec2 texcoord;
+
+void ofPackMain() {
+	gl_Position = (of_ModelViewProjectionMatrix * of_Vertex);
+	blockId = mc_Entity.x;
+	tangent = at_tangent + vec4(ofSampler, ofImage);
+	texcoord = of_MultiTexCoord0.st + texture(ofTexture, of_MultiTexCoord0.st).xy;
+}
+void main() { ofPackMain(); gl_Position.z = of_DepthConv.x * gl_Position.z + of_DepthConv.y * gl_Position.w; }
+--- notes ---
+fragmentOutputs = 0
+dynamicFragData = 0
+uniformConflicts = 0
+shadowCalls = 0
+unwrappedShadow = 0
+strippedExtensions = 0
+depthEpilogue = 1
+alphaEpilogue = 0
+coverage = 0
+depthLookups = 0
+parameterLookups = 0
+pinnedLookups = 0
+unpinnedParameterLookups = 0
+fragCoordZ = 0
+fragCoordXyz = 0
+fragCoordUnhandled = 0
+fragDepthWrites = 0
+fragDepthUnhandled = 0
+conflictNames = []
+comparedSamplers = []
+hardwareCompared = []
+retypedSamplers = []
+storageBlocks = []
+volumeLookups = 0
+volumesLeftAlone = 0
+trigCalls = 0
+gameTextureMatrix = 0
+gameModelView = 0
+--- drawBuffers ---
+[]
+--- block ---
+mat4 of_ModelViewProjectionMatrix
+vec3 ofSampler
+float ofImage
+vec4 of_DepthConv
+--- samplers ---
+sampler2D ofTexture

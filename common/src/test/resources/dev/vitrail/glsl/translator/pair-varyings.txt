@@ -1,0 +1,136 @@
+=== program gbuffers_textured on WORLD ===
+varyings = [of_FogFragCoord]
+provides = [fog, glcolor, kept, owed, owedFlat, texcoord]
+requires = [fog, glcolor, kept, owed, owedFlat, texcoord]
+unprovided = {owed=vec4, owedFlat=flat int}
+--- pair-varyings.vsh (VERTEX) ---
+#version 460 core
+#define <engine defines>
+layout(std140) uniform OfGlobals {
+	mat4 of_ModelViewProjectionMatrix;
+	vec4 of_DepthConv;
+};
+uniform sampler2D ofTexture;
+in vec4 of_Vertex;
+in vec4 of_Color;
+in vec3 of_Normal;
+in vec4 of_MultiTexCoord0;
+invariant gl_Position;
+out float of_FogFragCoord;
+out vec4 owed;
+flat out int owedFlat;
+
+
+out vec2 texcoord;
+out vec4 glcolor;
+out vec3 kept;
+ vec3 withheld;
+out float fog;
+
+void ofPackMain() {
+	texcoord = of_MultiTexCoord0.xy;
+	glcolor = of_Color;
+	kept = of_Normal;
+	withheld = of_Vertex.xyz;
+	fog = of_FogFragCoord;
+	gl_Position = of_ModelViewProjectionMatrix * of_Vertex;
+}
+void main() { owed = vec4(0); owedFlat = int(0); ofPackMain(); gl_Position.z = of_DepthConv.x * gl_Position.z + of_DepthConv.y * gl_Position.w; }
+--- notes ---
+fragmentOutputs = 0
+dynamicFragData = 0
+uniformConflicts = 0
+shadowCalls = 0
+unwrappedShadow = 0
+strippedExtensions = 0
+depthEpilogue = 1
+alphaEpilogue = 0
+coverage = 0
+depthLookups = 0
+parameterLookups = 0
+pinnedLookups = 0
+unpinnedParameterLookups = 0
+fragCoordZ = 0
+fragCoordXyz = 0
+fragCoordUnhandled = 0
+fragDepthWrites = 0
+fragDepthUnhandled = 0
+conflictNames = []
+comparedSamplers = []
+hardwareCompared = []
+retypedSamplers = []
+storageBlocks = []
+volumeLookups = 0
+volumesLeftAlone = 0
+trigCalls = 0
+gameTextureMatrix = 0
+gameModelView = 0
+--- drawBuffers ---
+[]
+--- block ---
+mat4 of_ModelViewProjectionMatrix
+vec4 of_DepthConv
+--- samplers ---
+sampler2D ofTexture
+--- pair-varyings.fsh (FRAGMENT) ---
+#version 460 core
+#define <engine defines>
+layout(std140) uniform OfGlobals {
+	mat4 of_ModelViewProjectionMatrix;
+	vec4 of_DepthConv;
+};
+uniform sampler2D ofTexture;
+in float of_FogFragCoord;
+layout(location = 0) out vec4 ofFragData0;
+void ofOrderOutputs() { ofFragData0; }
+
+
+
+in vec2 texcoord;
+in vec4 glcolor;
+in vec3 kept;
+
+in vec4 owed;
+flat in int owedFlat;
+in float fog;
+
+void main() { ofOrderOutputs();
+	vec4 c = texture(ofTexture, texcoord) * glcolor + vec4(kept + owed.xyz, fog);
+	ofFragData0 = c + float(owedFlat);
+}
+--- notes ---
+fragmentOutputs = 1
+dynamicFragData = 0
+uniformConflicts = 0
+shadowCalls = 0
+unwrappedShadow = 0
+strippedExtensions = 0
+depthEpilogue = 0
+alphaEpilogue = 0
+coverage = 0
+depthLookups = 0
+parameterLookups = 0
+pinnedLookups = 0
+unpinnedParameterLookups = 0
+fragCoordZ = 0
+fragCoordXyz = 0
+fragCoordUnhandled = 0
+fragDepthWrites = 0
+fragDepthUnhandled = 0
+conflictNames = []
+comparedSamplers = []
+hardwareCompared = []
+retypedSamplers = []
+storageBlocks = []
+volumeLookups = 0
+volumesLeftAlone = 0
+trigCalls = 0
+gameTextureMatrix = 0
+gameModelView = 0
+--- drawBuffers ---
+[]
+--- block ---
+mat4 of_ModelViewProjectionMatrix
+vec4 of_DepthConv
+--- samplers ---
+sampler2D ofTexture

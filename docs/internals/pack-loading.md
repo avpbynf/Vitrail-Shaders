@@ -40,6 +40,18 @@ And the same ceiling applies to raw bytes, an image included: an image is not ex
 hostile. Where a directive claims a length, the length on disk is asked for separately, so a blob
 that does not match its claim is refused without being read whole first.
 
+**A ceiling on the file does not bound the pack**, so two more sit on the whole of one opening. The
+text it reads is totalled, and past a total the pack is refused: what a reading decodes is kept for
+as long as the opening is, which a session keeps, so a small archive of many files that each unpack
+to the ceiling came to gigabytes of strings, an out-of-memory error rather than a refusal. A file is
+counted once, whichever reader reads it and however often, so the total is a property of the pack
+and not of how many loads a kept opening has served; the name search that reads the files outside
+the source list counts too, its inflating being done on the thread that draws, and images are not
+text and are not counted. And a walk of the pack refuses one holding more files and folders than a
+pack may, since a cap on each file bounds nothing while their number is free. Both stand far above
+the widest pack of the corpus, and both refuse through the load's own error, naming the pack,
+rather than cut a list short into a pack with files missing.
+
 Decoding never throws. Malformed input is replaced, a leading byte-order mark is dropped, and lines
 are split on all three endings including a lone carriage return: a file with classic Mac endings
 read as one long line loses every directive in it. A pack that ships one file in the wrong encoding
@@ -51,7 +63,10 @@ Only a fixed list of extensions is read as source. Widening it is not free: pack
 for other mods that contains lines beginning with an include directive, and scanning those changes
 every number the loader reports. The extension list is the only filter on what becomes source, and
 everything it leaves out is still reachable: proving that a name is mentioned nowhere in a pack
-means reading those files too, by a second walk that filters on the size ceiling instead.
+means reading those files too, by a second walk that filters on the size ceiling instead. Neither
+walk descends into a linked directory, but both would read a linked file as one of the pack's, so
+in a folder pack both leave out a file whose link leads outside the pack, for the reason the
+resolution below gives.
 
 The walk is then **sorted by pack-relative path**, and that sort is part of the contract. The
 settings index keeps the first declaration of a name and drops later ones, and packs do declare the
@@ -74,6 +89,19 @@ reason. A pack is downloaded content; without a check that the normalised target
 GLSL root, a specification made of dots and slashes has the engine read any file the game can reach
 and hand it to a shader.
 
+**In a folder, the text of a path is not where it leads.** A pack kept as a folder can carry links,
+and the usual tools on a Mac and on Linux keep the links of a zip they unpack. The read that comes
+after the check follows a link, so a `shaders/lib` linked to the root of the disk passed a check on
+the text and read whatever an include named under it. A folder pack is therefore asked a second
+question in the same body: where the path lands once every link on it is followed, against the
+pack's own folder resolved the same way, and a link out of the pack is refused exactly as a climb
+out of it is. A path that does not exist is resolved from its deepest part that does, so a name
+under a link out of the pack is outside whether or not anything answers to it there. The pack's
+folder and not its GLSL root, so a link between two of its own directories keeps working, and the
+folder resolved rather than as written, so a pack reached through a link of the player's own is not
+refused whole. A zip has none of this to answer: its filesystem reads an entry that was a link as a
+file holding the target's name.
+
 One detail there is easy to get wrong and silent when wrong: **the leading slashes come off before
 the resolution, not after.** Resolving an absolute-looking path against a base discards the base, so
 the search drops to the root of the archive and finds nothing, and a texture that is not found is
@@ -82,13 +110,24 @@ black rather than an error. Packs do write every one of their texture paths that
 When the exact name does not exist, the parent directory is listed once, cached by directory, and
 matched ignoring case. Packs are authored where a name that disagrees with the file on disk still
 opens; inside a zip it does not, so the same pack works as a folder and fails as an archive. The
-hits are counted so a pack that depends on it can be named rather than merely tolerated.
+hits are counted so a pack that depends on it can be named rather than merely tolerated. What the
+listing finds is asked where it leads before it is handed back, being a different file from the one
+confined: a name in another case can be a link out of the pack where the name asked for was nothing.
+A path naming the GLSL root itself is not matched at all. Its parent is the root of the pack, outside
+the GLSL root, and a file there called `SHADERS`, which an archive can hold beside `shaders/`, would
+otherwise answer `#include ".."`.
 
 ## The settings index
 
 Three patterns run over each line: a define that may itself be commented out, a typed constant of
 a scalar type, and an `#ifdef` or `#ifndef` naming one symbol and nothing else, which records that
 something tests that name. The first declaration of a name wins.
+
+**The index keeps its names in the order it met them**, a name declared twice staying where it was
+declared first. A page's `*` pours the settings out in that order, and so does the one page of a
+pack that lays out none, so the index is copied into an insertion-ordered map and never through the
+immutable-map factory: that one salts its iteration per process, and would give the same pack a
+different menu at every start of the game.
 
 **The kind of a setting is decided by whether the rest of the line is empty** once the trailing
 comment is stripped, not by whether a list of allowed values is present. Empty is a switch; anything
@@ -246,14 +285,15 @@ over the whole text and steps over the directives without evaluating one, since 
 reading are themselves what a conditional would be evaluated against. Everything a setting can
 decide is left to the walk above.
 
-The expression evaluator itself is a recursive descent over C precedence, in integers rather than
-floating point, because the compiler that sees the same line later will give the C answer whatever is
-decided here. Two small things bite: two-character operators are matched before single ones, or `<=`
-is read as `<` followed by `=`; and the base of a numeric literal has to be settled before a type
-suffix is stripped, since in hexadecimal `f` is a digit and taking it for a float suffix silently
-truncates the number. A division by zero, a shift by a negative or absurd amount, and the one
-overflowing division are treated as no answer rather than thrown: a condition that cannot be worked
-out is not a reason to abandon the load.
+The expression evaluator itself is a recursive descent over C precedence, carrying a double beside a
+long so that whole numbers stay exact and the arithmetic widens once a side is fractional, because
+the compiler that sees the same line later will give the C answer whatever is decided here. Two
+small things bite: two-character operators are matched before single ones, or `<=` is read as `<`
+followed by `=`; and the base of a numeric literal has to be settled before a type suffix is
+stripped, since in hexadecimal `f` is a digit and taking it for a float suffix silently truncates
+the number. A division by zero, a shift by a negative or absurd amount, and the one overflowing
+division are treated as no answer rather than thrown: a condition that cannot be worked out is not a
+reason to abandon the load.
 
 ## Flattening an entry file
 
@@ -299,8 +339,17 @@ turns the message itself into the runaway.
 The nesting budget inside the expression evaluator is shared between brackets and prefix operators,
 because a bracket limit alone bounds nothing: a long run of prefix operators costs the same stack
 frames with no bracket in sight. Name resolution and expression evaluation are mutually recursive, so
-their budget travels through the whole nest instead of restarting at each hop; two settings defined
-in terms of each other would otherwise reach the stack limit.
+their budgets travel through the whole nest instead of restarting at each hop, and there are two of
+them. The depth is one: two settings defined in terms of each other would otherwise reach the stack
+limit. The number of names resolved is the other, because a name is read again from its text
+wherever it is met: a setting written as a wide sum of the next, and that one of the next, costs the
+width to the power of the levels, and four levels sit well inside the depth. A condition that runs
+out of names has no answer, which is read as taken, as any condition that cannot be worked out is.
+
+Substituting symbols into a line of a properties file has the same shape, where what grows is the
+line itself: a symbol written as many others, a few rounds deep, reaches gigabytes. A round that
+would take the line past a length is abandoned, and the line is handed on as the round before left
+it, names and all, so the reader says which name it could not read.
 
 Profile expansion has the same shape and needs the same pairing. Profiles form a graph, not a tree,
 so a profile naming the next one several times multiplies at every level and can run for minutes

@@ -34,11 +34,23 @@ the texture. That is the reference's key too, and the reason is that a render ty
 texture, so there are as many of them as there are mobs on screen, while the pipelines are a fixed
 table the game builds once.
 
-Three things do belong to the draw rather than to the pass, and are set again for every draw of a
+Three things do belong to the draw rather than to the pass, and are read again for every draw of a
 run: the image, since one pipeline draws every mob on screen and each of them brings its own skin;
 the scissor, both ways round, since a rectangle left standing from the previous draw would cut
 whatever comes next down to it; and the game's own per-draw transform block, which is what a pack
 reads as `gl_TextureMatrix[0]` and which two breezes on screen carry two of inside one run.
+
+The pipeline is the run's, bound at its first draw and never again inside it. The scissor and the
+transform block are put on the pass only when they differ from what the run last gave it, since the
+pass holds both until it is told another and both games mark the descriptors dirty on every set,
+equal or not. The first draw of a run gives the pipeline, the scissor and the transform block
+whatever the pass stood on, and the first bind of a program into a pass gives the block and every
+name the program declares, so a held pass's leftover state is never a draw's to inherit.
+`SentState` decides the first three, and the game's own draws and every other family's are not
+counted in it, which is why a run forgets it at both ends. The image is given at every draw: the
+game folds consecutive draws of one render type into one, so the next draw of a run brings another
+image and the descriptors are owed a push whatever is compared. `vitrail/keep-redone-work` sends
+the three and the block at every draw, for measuring the difference.
 
 One family never reaches this door. The particle renderer implements the feature interface directly
 instead of extending the class that owns `executeGroup`, so it has an `executeGroup` of its own,
@@ -333,6 +345,16 @@ and a shield among the translucent ones. It is in the opaque half's coverage mas
 left out: it blends onto the pixels the piece under it just wrote, and those pixels are the pack's
 target now.
 
+**26.3 no longer submits a glint of its own, and it is given one back.** That game draws an enchanted
+item, a piece of armour, a trident and a shield in one draw each, through a render type whose pipeline
+samples the glint sheet beside the texture and adds it in the shader. No program of the model the
+packs are written for draws a piece and its glint at once, so while a pack draws, the submission is
+split back into 26.2's two: the plain piece, then the glint through 26.2's own three glint render
+types, rebuilt because 26.3 dropped them. The carriers then arrive on the moments listed above. The
+two glint render types 26.3 kept, for trims and banner patterns, force the solid phase and would put a
+mob's glint on the early row instead of the late one. Photon draws nothing of that row onto a mob,
+which is how that was found.
+
 Because those tables are keyed by pipeline and a texture is all that separates two rows, **two
 origins must not land in one draw**. There are two ways they could. The obvious one is the equality
 match inside the group's draw lookup; the one that costs a review is above it, where the group hands
@@ -351,6 +373,30 @@ layer catches, and that layer is cleared to transparent black and composed as th
 blended by alpha. The crumbling multiplies instead, so left there it multiplies against the clear
 and the cracks come out opaque black rather than darkening the face they lie on. Served, the multiply
 lands on the picture, which is where the game meant to put it.
+
+26.3 submits the cracks over an opaque block among the solid features instead, and keeps the
+breaking overlay phase for a translucent block's cracks; under its order independent transparency
+that phase is the order independent pass. The row is bound to the translucent features,
+since the crumbling blends, so on 26.3 those cracks went back to the game and the pack's image
+covered them: a block of stone or wood showed none while it was mined. While a pack draws, that
+transparency is off and `SubmitNodeCollectionCrumblingMixin` submits all of them to the breaking
+overlay phase again, which 26.3 executes where 26.2 did.
+
+The game's method is not the only one that makes that choice. On Fabric, Fabric API's renderer
+module (in Fabric API and in the copy of it Sodium carries) replaces the level's call to it with a
+call to an overload of its own that takes the block's mesh, a copy of the game's body that ends in
+the module's `ExtendedBlockModelSubmit`. There it is the overload that sends an opaque block's
+cracks to the solid features, and the game's method is never reached for a block in the level, so
+the mixin edits both, each selected by its full descriptor. A name alone selects only the first
+method of that name, which is the game's, and a wildcard skips a method another mixin merged; a
+descriptor selects the overload whichever mixin config applied first, because Mixin merges every
+mixin's methods into a class before it looks for targets. Mixin also refuses to inject into a
+merged method unless the injecting mixin's priority is strictly higher than that of the mixin that
+merged it, and the module's is the default 1000, so `SubmitNodeCollectionCrumblingMixin` has 1100;
+below that the apply fails and the game does not start. The overload's injector is optional,
+since NeoForge, and Fabric without the module, has no such method. The copy asks the same
+`useImprovedTransparency` and submits to the same phases, so the row and the phase are those above.
+The cracks over a block entity go through `submitCrumblingOverlay`, which the module does not touch.
 
 **The block outline** is the third of those four, drawn from the lines format of the game's, and it
 is the one the full-screen layer could not carry at all rather than carry flat. The layer is composed

@@ -41,14 +41,23 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
         with:
           distribution: temurin
           java-version: 25
 
-      - uses: gradle/actions/setup-gradle@v4
+      # A run on either long-lived branch writes the cache, and no other run does. Left to itself
+      # the action writes on the default branch alone, which is main, and main moves only at a
+      # release: every run in between started from what the last release left, so whatever dev had
+      # added since, a dependency or a whole game, was fetched and decompiled again by each of them.
+      # A request reads what dev wrote, a run on a request being allowed its base branch's cache,
+      # and still writes nothing: an entry of its own would be scoped to its merge ref, and read by
+      # nothing but a re-run of that same request.
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/dev' && github.ref != 'refs/heads/main' }}
 
       # What this refuses is whatever build.gradle refuses on the day it runs. Naming the gates here
       # as well would only give them a third home to drift out of step with.

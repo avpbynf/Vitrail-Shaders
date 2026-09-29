@@ -128,6 +128,13 @@ public final class PassTimings {
 	/** Negative until the property and the file have been read, which needs the game directory. */
 	private static int keepRedone = -1;
 
+	private static final boolean RING_PER_PROGRAM_PROPERTY = Boolean.getBoolean("vitrail.ringPerProgram");
+
+	private static final String RING_PER_PROGRAM_ARM_FILE = "ring-per-program";
+
+	/** Negative until the property and the file have been read, like {@link #keepRedone}. */
+	private static int ringPerProgram = -1;
+
 	private static final boolean FIRST_DRAW_PROPERTY =
 			Boolean.getBoolean("vitrail.keepFirstDrawCompiles");
 
@@ -286,6 +293,15 @@ public final class PassTimings {
 	}
 
 	/**
+	 * Whether the timed report is on, which is the switch every other instrument of this package that
+	 * only prints beside it is asked of, {@link FrameCensus} among them. One property read for the
+	 * lot, so the two cannot disagree about whether they are running.
+	 */
+	static boolean enabled() {
+		return ENABLED;
+	}
+
+	/**
 	 * Said once a frame by the one place that settles whether the shadow map is drawn, and only
 	 * from a frame that reached that decision.
 	 *
@@ -377,10 +393,13 @@ public final class PassTimings {
 		censusIntervalsHeld = 0;
 		censusFramesMissingMap = 0;
 		censusFramesDecidingMap = 0;
+		FrameCensus.reset();
+		ModuleCensus.reset();
 		// Read again, so an arming file written or changed while the game runs is picked up by the
 		// next pack load rather than by the next launch.
 		censusSeconds = -1;
 		keepRedone = -1;
+		ringPerProgram = -1;
 		keepFirstDraw = -1;
 		censusOpenLabel = null;
 		censusLabels.clear();
@@ -427,11 +446,31 @@ public final class PassTimings {
 	}
 
 	/**
-	 * Puts back the render-thread first-draw compiles of the six on-demand families, so that the
-	 * hitch and its absence are read off ONE jar, for the reason {@link #keepRedoneWork} gives.
-	 * Armed by {@code vitrail/keep-first-draw-compiles} beside the pack or by
-	 * {@code -Dvitrail.keepFirstDrawCompiles}, read again at every pack load, and off otherwise,
-	 * so a player never carries the old path.
+	 * Whether every geometry program keeps its uniform block in a ring of its own, instead of the one
+	 * ring the chain gives all of them. The two rings hold the same bytes and draw the same frame; the
+	 * difference is the fences a frame makes, one for each program against one for all, and that is
+	 * what this is for measuring on one jar.
+	 * <p>
+	 * Armed by {@code -Dvitrail.ringPerProgram=true} or by {@code vitrail/ring-per-program} beside the
+	 * pack, for the reason {@link #keepRedoneWork} gives, and settled once per pack load the same way.
+	 * Off otherwise, so a player is on the shared ring.
+	 */
+	public static boolean ringPerProgram() {
+		if (ringPerProgram < 0) {
+			ringPerProgram = RING_PER_PROGRAM_PROPERTY || armFile(RING_PER_PROGRAM_ARM_FILE) != null
+					? 1
+					: 0;
+		}
+
+		return ringPerProgram == 1;
+	}
+
+	/**
+	 * Puts back the render-thread first-draw compiles of the six families the worker reads ahead,
+	 * so that the hitch and its absence are read off ONE jar, for the reason
+	 * {@link #keepRedoneWork} gives. Armed by {@code vitrail/keep-first-draw-compiles} beside the
+	 * pack or by {@code -Dvitrail.keepFirstDrawCompiles}, read again at every pack load, and off
+	 * otherwise, so a player never carries the old path.
 	 */
 	public static boolean keepFirstDrawCompiles() {
 		if (keepFirstDraw < 0) {
@@ -631,6 +670,7 @@ public final class PassTimings {
 		}
 
 		frameEnds++;
+		FrameCensus.endFrame();
 		Frame frame = current;
 		if (frame != null) {
 			current = null;
@@ -894,8 +934,10 @@ public final class PassTimings {
 			}
 		}
 
-		// Outside the branch above, because how evenly the frames arrived is a reading of the wall
-		// clock and does not need the card to have answered a single query.
+		// Outside the branch above, because the census counts calls and needs no answer from the card,
+		// and how evenly the frames arrived is a reading of the wall clock and needs none either.
+		FrameCensus.report(seconds);
+		ModuleCensus.report();
 		printSpread();
 		printMissedMaps();
 

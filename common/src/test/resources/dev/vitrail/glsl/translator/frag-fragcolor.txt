@@ -1,0 +1,49 @@
+--- frag-fragcolor.fsh (FRAGMENT) ---
+#version 460 core
+#define <engine defines>
+uniform sampler2D tex;
+layout(location = 0) out vec4 ofFragData0;
+void ofOrderOutputs() { ofFragData0; }
+
+
+
+in vec2 uv;
+in vec4 tint;
+
+void main() { ofOrderOutputs();
+	ofFragData0 = texture(tex, uv) * tint;
+}
+--- notes ---
+fragmentOutputs = 1
+dynamicFragData = 0
+uniformConflicts = 0
+shadowCalls = 0
+unwrappedShadow = 0
+strippedExtensions = 0
+depthEpilogue = 0
+alphaEpilogue = 0
+coverage = 0
+depthLookups = 0
+parameterLookups = 0
+pinnedLookups = 0
+unpinnedParameterLookups = 0
+fragCoordZ = 0
+fragCoordXyz = 0
+fragCoordUnhandled = 0
+fragDepthWrites = 0
+fragDepthUnhandled = 0
+conflictNames = []
+comparedSamplers = []
+hardwareCompared = []
+retypedSamplers = []
+storageBlocks = []
+volumeLookups = 0
+volumesLeftAlone = 0
+trigCalls = 0
+gameTextureMatrix = 0
+gameModelView = 0
+--- drawBuffers ---
+[]
+--- block ---
+--- samplers ---
+sampler2D tex

@@ -140,7 +140,7 @@ final class PackDump {
 
 			// Said once and the line left armed, rather than turning the dump off outright: that
 			// would be right only while everything a place draws with is read on its first frame.
-			// Three families are read at the moment the world first draws one, so naming a piece of
+			// The pack-load worker reads the families after the chain is up, so naming a piece of
 			// the sky or an entity would be refused before the thing existed and stay refused for
 			// the rest of the session. What is listed is therefore what has been read SO
 			// FAR and the line says as much, since another family reading later still answers.

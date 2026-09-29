@@ -6,6 +6,8 @@ import dev.vitrail.render.LegacyTerrainFilter;
 import dev.vitrail.render.TerrainDraw;
 import dev.vitrail.render.TerrainSampler;
 
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.llamalad7.mixinextras.sugar.Local;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.textures.GpuSampler;
@@ -18,7 +20,6 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
@@ -137,12 +138,17 @@ public abstract class MixinShaderChunkRenderer {
 	 * injection is the memo being dropped or reached by some other road, and refusing to load then
 	 * names the one thing that moved. Failing quietly is the other way round: a world destroyed a
 	 * pack switch later, and nothing on screen pointing anywhere near here.
+	 * <p>
+	 * <strong>Wrapped and not redirected</strong>, so that another mod reading the same memo, a
+	 * shader loader beside this one above all, chains with this rather than stopping the game at
+	 * startup. The lookup is still made once, through whatever else wraps it, and what comes back is
+	 * judged as before.
 	 */
-	@Redirect(method = "compileProgram",
+	@WrapOperation(method = "compileProgram",
 			at = @At(value = "INVOKE", target = "Ljava/util/Map;get(Ljava/lang/Object;)Ljava/lang/Object;"),
 			require = 1)
-	private Object vitrail$ofThisFormat(Map<?, ?> memo, Object pass) {
-		Object found = memo.get(pass);
+	private Object vitrail$ofThisFormat(Map<?, ?> memo, Object pass, Operation<Object> original) {
+		Object found = original.call(memo, pass);
 		// A pipeline binding nothing at nought is no more usable than one binding another format, and
 		// the renderer builds none: every road into this map goes through its own vertex binding.
 		if (found instanceof RenderPipeline pipeline

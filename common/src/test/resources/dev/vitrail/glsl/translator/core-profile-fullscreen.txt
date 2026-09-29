@@ -1,0 +1,69 @@
+--- core-profile-fullscreen.vsh (VERTEX) ---
+#version 460 core
+#define <engine defines>
+layout(std140) uniform OfGlobals {
+	vec4 of_DepthConv;
+};
+in vec3 Position;
+in vec2 UV0;
+#define of_Vertex vec4(Position, 1.0)
+#define of_MultiTexCoord0 vec4(UV0, 0.0, 1.0)
+#define of_MultiTexCoord1 vec4(0.0, 0.0, 0.0, 1.0)
+#define of_MultiTexCoord2 vec4(0.0, 0.0, 0.0, 1.0)
+#define of_MultiTexCoord3 vec4(0.0, 0.0, 0.0, 1.0)
+#define of_MultiTexCoord4 vec4(0.0, 0.0, 0.0, 1.0)
+#define of_MultiTexCoord5 vec4(0.0, 0.0, 0.0, 1.0)
+#define of_MultiTexCoord6 vec4(0.0, 0.0, 0.0, 1.0)
+#define of_MultiTexCoord7 vec4(0.0, 0.0, 0.0, 1.0)
+#define of_Color vec4(1.0)
+#define of_Normal vec3(0.0, 0.0, 1.0)
+#define vaPosition Position
+#define vaUV0 UV0
+vec4 vaColor = vec4(0.0);
+invariant gl_Position;
+
+
+
+
+
+out vec2 texcoord;
+
+void ofPackMain() {
+	texcoord = vaUV0;
+	gl_Position = vec4(vaPosition.xy * 2.0 - 1.0, 0.0, 1.0);
+}
+void main() { ofPackMain(); gl_Position.z = of_DepthConv.x * gl_Position.z + of_DepthConv.y * gl_Position.w; }
+--- notes ---
+fragmentOutputs = 0
+dynamicFragData = 0
+uniformConflicts = 0
+shadowCalls = 0
+unwrappedShadow = 0
+strippedExtensions = 0
+depthEpilogue = 1
+alphaEpilogue = 0
+coverage = 0
+depthLookups = 0
+parameterLookups = 0
+pinnedLookups = 0
+unpinnedParameterLookups = 0
+fragCoordZ = 0
+fragCoordXyz = 0
+fragCoordUnhandled = 0
+fragDepthWrites = 0
+fragDepthUnhandled = 0
+conflictNames = []
+comparedSamplers = []
+hardwareCompared = []
+retypedSamplers = []
+storageBlocks = []
+volumeLookups = 0
+volumesLeftAlone = 0
+trigCalls = 0
+gameTextureMatrix = 0
+gameModelView = 0
+--- drawBuffers ---
+[]
+--- block ---
+vec4 of_DepthConv
+--- samplers ---

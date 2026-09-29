@@ -144,18 +144,43 @@ public final class VolumeAtlas {
 		int out = texelBytes();
 		byte[] one = RawTexels.one(this.type);
 		byte[] atlas = new byte[atlasWidth() * atlasHeight() * out];
+		int alpha = RawTexels.ALPHA * channelBytes();
+
+		// The column of the volume each column of a tile reads, from -1 to width inclusive: the two
+		// extra columns are the gutter. The same for every row of every slice, so it is worked out once.
+		int[] columns = new int[this.width + 2 * GUTTER];
+		for (int u = -GUTTER; u < this.width + GUTTER; u++) {
+			columns[u + GUTTER] = past(u, this.width);
+		}
+
 		for (int z = 0; z < this.depth; z++) {
-			// From -1 to width inclusive: the two extra columns and rows are the gutter, and they
-			// are filled by the same walk rather than patched on afterwards.
+			// The same walk over the rows fills the gutter rows: they read the row past() names.
 			for (int v = -GUTTER; v < this.height + GUTTER; v++) {
-				for (int u = -GUTTER; u < this.width + GUTTER; u++) {
-					int x = past(u, this.width);
-					int y = past(v, this.height);
-					int to = texel(u, v, z) * out;
-					System.arraycopy(blob, index(x, y, z) * in, atlas, to, in);
-					if (this.components <= RawTexels.ALPHA) {
-						System.arraycopy(one, 0, atlas, to + RawTexels.ALPHA * channelBytes(), one.length);
+				int from = index(0, past(v, this.height), z) * in;
+				int to = texel(-GUTTER, v, z) * out;
+
+				if (this.components > RawTexels.ALPHA) {
+					// Four channels go up as they are, so what lies between the gutters is one run of
+					// the blob and only the gutter texels have a column to work out.
+					System.arraycopy(blob, from, atlas, to + GUTTER * out, this.width * in);
+					for (int g = 0; g < GUTTER; g++) {
+						System.arraycopy(blob, from + columns[g] * in, atlas, to + g * out, in);
+						int right = this.width + GUTTER + g;
+						System.arraycopy(blob, from + columns[right] * in, atlas, to + right * out, in);
 					}
+
+					continue;
+				}
+
+				for (int column : columns) {
+					int source = from + column * in;
+					for (int b = 0; b < in; b++) {
+						atlas[to + b] = blob[source + b];
+					}
+					for (int b = 0; b < one.length; b++) {
+						atlas[to + alpha + b] = one[b];
+					}
+					to += out;
 				}
 			}
 		}

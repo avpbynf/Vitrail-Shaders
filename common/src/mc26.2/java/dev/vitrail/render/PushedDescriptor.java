@@ -2,6 +2,7 @@ package dev.vitrail.render;
 
 import dev.vitrail.render.storage.StorageBuffers;
 import dev.vitrail.render.storage.StorageImages;
+import dev.vitrail.render.timing.FrameCensus;
 
 import com.mojang.blaze3d.vulkan.VulkanBindGroupLayout;
 
@@ -32,6 +33,7 @@ public final class PushedDescriptor {
 
 	/** The entry the push is about to write, and the pack's answers for its name. */
 	public static void begin(VulkanBindGroupLayout.Entry entry) {
+		FrameCensus.descriptor();
 		PushedDescriptor current = CURRENT.get();
 		current.entry = entry;
 		current.image = StorageImages.bound(entry.name());

@@ -17,10 +17,11 @@ import dev.vitrail.pack.model.PixelType;
  * {@code R8} search table, both read as {@code .rg} and {@code .r}, and until they were served the
  * compute that samples them found no image under the name and was dropped whole.
  * <p>
- * A shape that is not two dimensional stays out. A {@code TEXTURE_1D} would be a
- * {@code sampler1D} and a {@code TEXTURE_RECTANGLE} a {@code sampler2DRect} indexed in texels
- * rather than in zero to one, and neither is a thing this backend binds or this engine rewrites;
- * no pack of the corpus declares either.
+ * A shape that is not two dimensional stays out. A {@code TEXTURE_RECTANGLE} would be a
+ * {@code sampler2DRect} indexed in texels rather than in zero to one, which this backend does not
+ * bind and this engine does not rewrite. A {@code TEXTURE_1D} would be a {@code sampler1D}, bound
+ * since Bliss's line of block data needed it, but only over an image an {@code image} directive
+ * declares: nothing uploads a line read from a file. No pack of the corpus ships either.
  */
 public final class RawImage {
 
@@ -83,11 +84,22 @@ public final class RawImage {
 		int out = texelBytes();
 		byte[] one = RawTexels.one(this.type);
 		byte[] image = new byte[texels * out];
-		for (int texel = 0; texel < texels; texel++) {
-			int to = texel * out;
-			System.arraycopy(blob, texel * in, image, to, in);
-			if (this.components <= RawTexels.ALPHA) {
-				System.arraycopy(one, 0, image, to + RawTexels.ALPHA * channelBytes(), one.length);
+		if (this.components > RawTexels.ALPHA) {
+			// Four channels are what goes up, so there is nothing to widen and the blob is the image.
+			System.arraycopy(blob, 0, image, 0, texels * in);
+
+			return image;
+		}
+
+		// Byte by byte and not one arraycopy a texel: a texel is one to twelve bytes, and the call
+		// costs more than the copy it makes.
+		int alpha = RawTexels.ALPHA * channelBytes();
+		for (int texel = 0, from = 0, to = 0; texel < texels; texel++, from += in, to += out) {
+			for (int b = 0; b < in; b++) {
+				image[to + b] = blob[from + b];
+			}
+			for (int b = 0; b < one.length; b++) {
+				image[to + alpha + b] = one[b];
 			}
 		}
 

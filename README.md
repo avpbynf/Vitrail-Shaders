@@ -82,7 +82,8 @@ settings screen reads the pack's own menu layout, and a resource pack's normal
 and specular maps are served beside the blocks they belong to.
 
 The rest still comes from the game, and that set moves from one release to the
-next: the engine logs which families do when a place first draws, and
+next: the engine logs which families do when a place first draws, names any
+family it could not read in an error line of its own, and
 [pack compatibility](docs/compatibility.md) starts from what you are seeing and
 names the cause. If what you want today is a finished picture, use
 [Iris](https://github.com/IrisShaders/Iris) on the OpenGL backend instead, which

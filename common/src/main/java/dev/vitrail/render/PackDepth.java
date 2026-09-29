@@ -20,6 +20,7 @@ import com.mojang.blaze3d.textures.GpuTextureView;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import net.minecraft.client.renderer.BindGroupLayouts;
 import net.minecraft.resources.Identifier;
+import org.joml.Vector4f;
 
 import java.util.Locale;
 import java.util.Optional;
@@ -153,6 +154,9 @@ final class PackDepth {
 
 	/** One float a texel: a window depth is one number and nothing here needs the other three. */
 	private static final GpuFormat FORMAT = GpuFormat.R32_FLOAT;
+
+	/** The far plane of the window a pack reads depth in, where nothing was drawn. */
+	private static final Vector4f FAR_PLANE = new Vector4f(1.0F, 1.0F, 1.0F, 1.0F);
 
 	private static final String LABEL = "Vitrail depth window";
 
@@ -293,6 +297,13 @@ final class PackDepth {
 	private boolean distantSceneWritten;
 
 	/**
+	 * Whether the far terrain's pair holds the far plane {@link #takeDistantNothing} emptied it to,
+	 * and nothing a take has drawn since, which is what lets a run of frames with no far terrain in
+	 * view pay the two clears once rather than once a frame.
+	 */
+	private boolean distantHoldsFar;
+
+	/**
 	 * Whether the third image and the far terrain's pair hold the depth of the frame that has just
 	 * ended, which is the one thing the three per frame flags above cannot say once they are down.
 	 * <p>
@@ -424,6 +435,7 @@ final class PackDepth {
 		}
 
 		this.distantOpaqueWritten = true;
+		this.distantHoldsFar = false;
 
 		return true;
 	}
@@ -450,6 +462,52 @@ final class PackDepth {
 			return false;
 		}
 
+		this.distantSceneWritten = true;
+		this.distantHoldsFar = false;
+
+		return true;
+	}
+
+	/**
+	 * Fills the far terrain's pair with the far plane of the pack's window, for a frame on which the
+	 * far terrain is there and put nothing on the screen: every LOD culled, the camera above the
+	 * world looking at the sky, or a far terrain that has not built a tile yet. Must run on the
+	 * render thread and outside any render pass, like the two takes it stands in for.
+	 * <p>
+	 * <strong>The one texel white the names fall back on is the far plane only to a filtered
+	 * read.</strong> A pack that fetches by texel reads outside it everywhere but one corner, which
+	 * is undefined, and on MoltenVK it was measured to read nought, the near plane: every pixel of
+	 * sky became far terrain standing at the camera. Photon v1.3b fetches its distant depth that way
+	 * in every deferred and composite that reads it ({@code program/d4_deferred_shading.fsh:214} and
+	 * {@code program/c4_taa_exposure.fsh:280} among them), and what the player saw was the sky
+	 * painted over in one flat colour whenever nothing of the far terrain was in view.
+	 * <p>
+	 * Iris never serves that texel while the far terrain is there: it hands the names DH's own live
+	 * image ({@code compat/dh/DHCompatInternal.java:256-258}), and DH empties that image on every
+	 * frame it renders, whether or not the list of what it will draw came out empty
+	 * ({@code core/render/renderer/LodRenderer.java:220-224}), so a frame with nothing in view reads
+	 * the far plane at every texel. This is that image. The white stays the answer where the pack
+	 * was never handed {@code DISTANT_HORIZONS}, as it is under Iris, and that is why the caller
+	 * asks.
+	 * <p>
+	 * Both images are marked written, so the window before the next world serves the far plane too
+	 * rather than an older far terrain, and the clears are paid only when the pair last held one:
+	 * nothing draws into it between two frames with no far terrain.
+	 *
+	 * @return false when the pair could not be allocated, which leaves the names on the white
+	 */
+	boolean takeDistantNothing(CommandEncoder encoder, int width, int height) {
+		if (!ensureDistant(width, height)) {
+			return false;
+		}
+
+		if (!this.distantHoldsFar) {
+			encoder.clearColorTexture(this.distantOpaque.texture(), FAR_PLANE);
+			encoder.clearColorTexture(this.distantScene.texture(), FAR_PLANE);
+			this.distantHoldsFar = true;
+		}
+
+		this.distantOpaqueWritten = true;
 		this.distantSceneWritten = true;
 
 		return true;
@@ -668,6 +726,7 @@ final class PackDepth {
 		this.distantSceneWritten = false;
 		this.distantOpaqueKept = false;
 		this.distantSceneKept = false;
+		this.distantHoldsFar = false;
 		this.distantBroken = false;
 	}
 
@@ -838,6 +897,7 @@ final class PackDepth {
 			this.distantSceneWritten = false;
 			this.distantOpaqueKept = false;
 			this.distantSceneKept = false;
+			this.distantHoldsFar = false;
 			this.distantOpaque = close(this.distantOpaque);
 			this.distantScene = close(this.distantScene);
 			this.distantOpaque = new TargetSurface("Vitrail far terrain depth before its water",

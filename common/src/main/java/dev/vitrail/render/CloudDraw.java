@@ -1,7 +1,6 @@
 package dev.vitrail.render;
 
 import dev.vitrail.glsl.PackProgram;
-import dev.vitrail.pack.option.OptionValue;
 import dev.vitrail.pack.source.OpenedPack;
 import dev.vitrail.pack.source.ShaderProperties;
 import dev.vitrail.pack.target.ChainPlan;
@@ -66,8 +65,6 @@ public final class CloudDraw extends FamilyDraw {
 	private final PackChain owner;
 	private final Path packPath;
 	private final String place;
-	private final Map<String, OptionValue> chosen;
-	private final String profile;
 	private final PackValues values;
 	private final int load;
 	private final ChainPlan plan;
@@ -91,14 +88,11 @@ public final class CloudDraw extends FamilyDraw {
 	/** The program of the pass being recorded, between the moment it is prepared and its bind. */
 	private CloudProgram drawing;
 
-	CloudDraw(PackChain owner, Path packPath, String place, Map<String, OptionValue> chosen,
-			String profile, PackValues values, int load, ChainPlan plan, TargetPlan chainTargets,
-			boolean chainRuns, ColorTargets targets) {
+	CloudDraw(PackChain owner, Path packPath, String place, PackValues values, int load,
+			ChainPlan plan, TargetPlan chainTargets, boolean chainRuns, ColorTargets targets) {
 		this.owner = owner;
 		this.packPath = packPath;
 		this.place = place;
-		this.chosen = Map.copyOf(chosen);
-		this.profile = profile;
 		this.values = values;
 		this.load = load;
 		this.plan = plan;
@@ -123,17 +117,11 @@ public final class CloudDraw extends FamilyDraw {
 
 	/**
 	 * Reads the pack for this family, without compiling. One call is enough; a reading that served
-	 * nothing is still one. The chain asks during its warm-up so shaderc does not land on the first
-	 * draw.
-	 */
-	void prefetch() {
-		prefetch(null);
-	}
-
-	/**
-	 * The same through an opening the caller holds, which is how the load worker reads the six
-	 * families: one opening, one plan of the place and one program tree shared between them,
-	 * where each used to open the archive and rebuild all three for itself.
+	 * nothing is still one.
+	 * <p>
+	 * Through the opening the load worker holds, which is the one road this family is read by: one
+	 * opening, one plan of the place and one program tree shared between the six families, where
+	 * each used to open the archive and rebuild all three for itself.
 	 */
 	@Override
 	void prefetch(OpenedPack shared) {
@@ -200,8 +188,9 @@ public final class CloudDraw extends FamilyDraw {
 	}
 
 	/**
-	 * Everything that has to happen before the cloud renderer opens its pass: the program read, the
-	 * pipeline compiled, the frame opened and this frame's block written.
+	 * Everything that has to happen before the cloud renderer opens its pass: the pipeline compiled,
+	 * the frame opened and this frame's block written. The program is the load worker's to read, and
+	 * clouds it has not read are left to the game.
 	 *
 	 * @param fancy whether the game is about to draw its boxed clouds rather than its flat ones,
 	 *              which is the one thing that tells its two pipelines apart
@@ -273,15 +262,12 @@ public final class CloudDraw extends FamilyDraw {
 	/**
 	 * Reads the pack for its cloud program and settles where the clouds are drawn.
 	 * <p>
-	 * Once per place and on demand, like the sky and the entities: the game builds no cloud geometry
-	 * until it is about to draw one, and a place with the clouds switched off should not pay for a
-	 * program it never draws.
+	 * Once per place, on the load worker like the sky and the entities, and only where the clouds are
+	 * switched on: a place with the clouds switched off should not pay for a program it never draws.
 	 */
 	private void read(OpenedPack shared) {
 		try {
-			Optional<PackProgram.Loaded> loaded = shared != null
-					? PackProgram.loadClouds(shared, this.place)
-					: PackProgram.loadClouds(this.packPath, this.place, this.chosen, this.profile);
+			Optional<PackProgram.Loaded> loaded = PackProgram.loadClouds(shared, this.place);
 			if (loaded.isEmpty()) {
 				Vitrail.logger().info("{} serves nothing in {} for its clouds, so the game keeps its "
 						+ "own", this.packPath.getFileName(),
@@ -295,9 +281,11 @@ public final class CloudDraw extends FamilyDraw {
 			// answer is a compile: a module is only built when a pipeline is first prepared, so the
 			// setting nobody plays on costs one Java object and nothing on the device.
 			this.programs.put(Boolean.TRUE, CloudProgram.of(loaded.get(), true, this.values, this.load,
-					writes, this.chainTargets, this.targets, this.chainRuns));
+					writes, this.chainTargets, this.targets, this.owner.blocks(),
+					this.chainRuns));
 			this.programs.put(Boolean.FALSE, CloudProgram.of(loaded.get(), false, this.values,
-					this.load, writes, this.chainTargets, this.targets, this.chainRuns));
+					this.load, writes, this.chainTargets, this.targets, this.owner.blocks(),
+					this.chainRuns));
 
 			if (writes.isEmpty()) {
 				Vitrail.logger().info("{} has nowhere of its own for its clouds, so they keep the "
@@ -360,6 +348,11 @@ public final class CloudDraw extends FamilyDraw {
 		}
 
 		return program.prepare(device);
+	}
+
+	@Override
+	String named() {
+		return "the clouds";
 	}
 
 	/** The programs once the clouds have been read, for the decoded dump. Empty until then. */

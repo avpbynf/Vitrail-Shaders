@@ -36,6 +36,9 @@ public final class PackLoader {
 	private static final Comparator<String> BY_NAME =
 			String.CASE_INSENSITIVE_ORDER.thenComparing(Comparator.naturalOrder());
 
+	/** What ends the name a folder is copied in under, after a dot and the pack's own name. */
+	private static final String STAGING_SUFFIX = ".part";
+
 	private PackLoader() {
 	}
 
@@ -153,15 +156,43 @@ public final class PackLoader {
 
 	/**
 	 * Whether a path is worth treating as a pack at all, which is the same question the listing above
-	 * answers and the one the settings screen asks of a file dropped onto it.
+	 * answers and the one the settings screen asks of a file dropped onto it. A folder still being
+	 * copied in under {@link #staging} is not one yet.
 	 */
 	public static boolean looksLikeAPack(Path entry) {
 		if (Files.isDirectory(entry)) {
-			return true;
+			return !isStaging(entry);
 		}
 
 		Path name = entry.getFileName();
 
 		return name != null && name.toString().toLowerCase(Locale.ROOT).endsWith(".zip");
+	}
+
+	/**
+	 * Where a folder dropped onto the pack list is copied under {@code name} until the whole of it
+	 * is there, beside where it goes.
+	 * <p>
+	 * The shape has its home here and not with the copy, because the listing above has to leave it
+	 * out and the two only agree if one of them names it. A copy is made on the thread that draws
+	 * and renamed away before the list is next built, so what the listing leaves out is the one a
+	 * crash cut short, which would otherwise sit in the list as a pack with files missing until the
+	 * same folder is dropped again and clears it. Only that shape is left out, and not every name
+	 * that opens on a dot, which would take away a pack somebody simply named that way.
+	 */
+	public static Path staging(Path directory, String name) {
+		return directory.resolve("." + name + STAGING_SUFFIX);
+	}
+
+	private static boolean isStaging(Path entry) {
+		Path name = entry.getFileName();
+		if (name == null) {
+			return false;
+		}
+
+		String text = name.toString();
+
+		return text.length() > 1 + STAGING_SUFFIX.length() && text.startsWith(".")
+				&& text.endsWith(STAGING_SUFFIX);
 	}
 }

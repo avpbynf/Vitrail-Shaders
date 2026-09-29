@@ -37,10 +37,7 @@ import org.joml.FrustumIntersection;
 public final class ShadowCull implements Frustum {
 
 	private final Frustum planes;
-	private final float distance;
-
-	/** Half the side of the box the shape keeps whole whatever the distance says, or negative. */
-	private final float safeZone;
+	private final ShadowBox box;
 
 	/**
 	 * @param planes   the shape the walk measures against before the box is cut out of it, which
@@ -52,13 +49,12 @@ public final class ShadowCull implements Frustum {
 	 */
 	public ShadowCull(Frustum planes, float distance, float safeZone) {
 		this.planes = planes;
-		this.distance = distance;
-		this.safeZone = safeZone;
+		this.box = new ShadowBox(distance, safeZone);
 	}
 
 	@Override
 	public boolean testAab(float minX, float minY, float minZ, float maxX, float maxY, float maxZ) {
-		return inside(minX, minY, minZ, maxX, maxY, maxZ)
+		return this.box.inside(minX, minY, minZ, maxX, maxY, maxZ)
 				&& this.planes.testAab(minX, minY, minZ, maxX, maxY, maxZ);
 	}
 
@@ -108,7 +104,7 @@ public final class ShadowCull implements Frustum {
 	 */
 	@Override
 	public int intersectAab(float minX, float minY, float minZ, float maxX, float maxY, float maxZ) {
-		if (!inside(minX, minY, minZ, maxX, maxY, maxZ)) {
+		if (!this.box.inside(minX, minY, minZ, maxX, maxY, maxZ)) {
 			return FrustumIntersection.OUTSIDE;
 		}
 
@@ -118,14 +114,7 @@ public final class ShadowCull implements Frustum {
 			return shape;
 		}
 
-		// The safe zone outranks the distance on a box it holds whole, which is Iris's order and not
-		// a softening of the line above: its safe zone frustum answers INSIDE off that box alone the
-		// moment the distance is anything but OUTSIDE (SafeZoneCullingFrustum.java:74-78).
-		return within(this.distance, minX, minY, minZ, maxX, maxY, maxZ)
-				|| (this.safeZone >= 0.0F
-						&& within(this.safeZone, minX, minY, minZ, maxX, maxY, maxZ))
-				? FrustumIntersection.INSIDE
-				: FrustumIntersection.INTERSECT;
+		return this.box.wholeOrPart(minX, minY, minZ, maxX, maxY, maxZ);
 	}
 
 	@Override
@@ -136,21 +125,5 @@ public final class ShadowCull implements Frustum {
 	@Override
 	public boolean testSectionExpanded(float x, float y, float z, float extend) {
 		return this.planes.testSectionExpanded(x, y, z, extend);
-	}
-
-	/** Whether any part of a camera-relative box is still within the distance, on all three axes. */
-	private boolean inside(float minX, float minY, float minZ,
-			float maxX, float maxY, float maxZ) {
-		return maxX >= -this.distance && minX <= this.distance
-				&& maxY >= -this.distance && minY <= this.distance
-				&& maxZ >= -this.distance && minZ <= this.distance;
-	}
-
-	/** Whether a camera-relative box is wholly within a half size, on all three axes. */
-	private static boolean within(float half, float minX, float minY, float minZ,
-			float maxX, float maxY, float maxZ) {
-		return minX >= -half && maxX <= half
-				&& minY >= -half && maxY <= half
-				&& minZ >= -half && maxZ <= half;
 	}
 }

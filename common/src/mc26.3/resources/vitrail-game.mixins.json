@@ -10,6 +10,7 @@
 		"FirstPersonHandsAndItemsRendererMixin",
 		"GameRendererHandMixin",
 		"GameRendererTransparencyMixin",
+		"ItemFeatureRendererGlintMixin",
 		"LevelRendererFeaturesMixin",
 		"LevelRendererMainPassMixin",
 		"PipelineBuilderMixin",
@@ -17,8 +18,12 @@
 		"RenderPipelinesAccessor",
 		"RenderSystemAccessor",
 		"RenderSystemMixin",
+		"RenderTypeAccessor",
+		"RenderTypesGlintMixin",
 		"SkyRendererMixin",
 		"SPIRVModuleMixin",
+		"SubmitNodeCollectionCrumblingMixin",
+		"SubmitNodeCollectionGlintMixin",
 		"VulkanRenderPipelineAccessor"
 	]
 }

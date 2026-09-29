@@ -148,6 +148,15 @@ public final class GeometryStage {
 		}
 	}
 
+	/**
+	 * The text of the geometry stage the compiler is handed for this pipeline as a module of its
+	 * own, which is none on this game: a stage that only hands each corner on is folded into the
+	 * fragment text, and any other sets the program aside.
+	 */
+	public static @Nullable String shipped(RenderPipeline pipeline) {
+		return null;
+	}
+
 	/** Files a rebuilt variant beside its base. Nothing is filed on this game. */
 	public static void noteBeside(RenderPipeline variant, RenderPipeline base) {
 		// Nothing to carry: no geometry stage is bound, so no variant owes one.

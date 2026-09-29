@@ -1,0 +1,55 @@
+--- alpha-self-declared.fsh (FRAGMENT) ---
+#version 460 core
+#define <engine defines>
+uniform sampler2D gtexture;
+layout(location = 0) out vec4 outColor;
+layout(location = 1) out vec4 outNormal;
+layout(location = 2) out float ofCoverage;
+void ofOrderOutputs() { outColor; outNormal; ofCoverage; }
+
+
+
+in vec2 texcoord;
+
+
+
+
+void ofPackMain() {
+	outColor = texture(gtexture, texcoord);
+	outNormal = vec4(0.5, 0.5, 1.0, 1.0);
+}
+void main() { ofOrderOutputs(); ofPackMain(); ofCoverage = gl_FragCoord.z; }
+--- notes ---
+fragmentOutputs = 2
+dynamicFragData = 0
+uniformConflicts = 0
+shadowCalls = 0
+unwrappedShadow = 0
+strippedExtensions = 0
+depthEpilogue = 0
+alphaEpilogue = 0
+coverage = 1
+depthLookups = 0
+parameterLookups = 0
+pinnedLookups = 0
+unpinnedParameterLookups = 0
+fragCoordZ = 0
+fragCoordXyz = 0
+fragCoordUnhandled = 0
+fragDepthWrites = 0
+fragDepthUnhandled = 0
+conflictNames = []
+comparedSamplers = []
+hardwareCompared = []
+retypedSamplers = []
+storageBlocks = []
+volumeLookups = 0
+volumesLeftAlone = 0
+trigCalls = 0
+gameTextureMatrix = 0
+gameModelView = 0
+--- drawBuffers ---
+[]
+--- block ---
+--- samplers ---
+sampler2D gtexture

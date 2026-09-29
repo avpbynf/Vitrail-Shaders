@@ -107,7 +107,8 @@ public final class StorageBuffers implements AutoCloseable {
 	/**
 	 * Allocates every absolute buffer once, and rebuilds the relative ones when the screen moves.
 	 * A failure is thrown rather than skipped: a tiny stand-in would let the pack compile and then
-	 * hang the GPU on the first out-of-range write.
+	 * hang the GPU on the first out-of-range write. It is the whole set given back as well, the way
+	 * {@link StorageImages#ensure} gives back its own.
 	 */
 	public void ensure(int screenWidth, int screenHeight) {
 		install();
@@ -128,17 +129,31 @@ public final class StorageBuffers implements AutoCloseable {
 		}
 
 		ensurePlaceholder(device);
-		// The map follows the list whatever happens below: an allocation that throws halfway
-		// through a resize has already destroyed the relative buffers and dropped them from the
-		// list, and a map left standing would hand a destroyed handle to the next descriptor push.
+		// Everything or nothing. Only an empty list makes the absolute buffers, so a refusal that
+		// kept the ones made before it would read as the whole set at the next screen size the
+		// colour targets try: the rest would never be made, and their names would go on being
+		// pushed as the placeholder's uniform buffer under a layout that declared a storage one,
+		// the two types under one binding StorageImages#refused describes. The map follows the list
+		// on both roads, so no descriptor push is handed a buffer destroyed here.
+		//
+		// An Error takes the same road as a RuntimeException. LWJGL raises a native
+		// OutOfMemoryError from its stack and its allocators, and the colour targets catch only
+		// the RuntimeException, so a half-made set would otherwise stay standing for whatever
+		// catches the Error further out. The road only queues the destructions and copies the list
+		// into a map, with no call into the driver, so it does not replace the failure it is
+		// handling, and what is rethrown is the throwable that was caught.
 		try {
 			allocate(vulkan, first, resized, screenWidth, screenHeight);
-		} finally {
+		} catch (RuntimeException | Error e) {
+			this.allocated.forEach(buffer -> buffer.destroy(vulkan));
+			this.allocated.clear();
 			rebind();
+			throw e;
 		}
 
 		this.lastWidth = screenWidth;
 		this.lastHeight = screenHeight;
+		rebind();
 		zero(device);
 	}
 

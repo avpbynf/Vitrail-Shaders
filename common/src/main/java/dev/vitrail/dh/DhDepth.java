@@ -312,7 +312,11 @@ public final class DhDepth {
 		} catch (ClassNotFoundException e) {
 			// The ordinary case: DH is simply not installed. Not worth a line above debug.
 			usable = false;
-		} catch (ReflectiveOperationException | RuntimeException e) {
+		} catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
+			// The LinkageError is caught with the rest, as at every other read of DH here: the
+			// forName above RUNS the class it names, and every getMethod after it loads the types in
+			// a signature, so a DH whose initialiser throws or whose classes do not link answers with
+			// an Error, and the callers of this are a frame being published and a pack being read.
 			usable = false;
 			Vitrail.logger().info("Distant Horizons is installed but not in a shape a projection can "
 					+ "be read out of, so its far terrain will stay flat: {}", e.toString());

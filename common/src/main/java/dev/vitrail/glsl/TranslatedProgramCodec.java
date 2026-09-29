@@ -94,8 +94,8 @@ final class TranslatedProgramCodec {
 				synthesized.put(text(in), text(in));
 			}
 
-			return new ProgramTranslator.TranslatedProgram(Map.copyOf(stages), uniforms, samplers,
-					sampled, Map.copyOf(synthesized), inputs);
+			return new ProgramTranslator.TranslatedProgram(stages, uniforms, samplers, sampled,
+					synthesized, inputs);
 		} catch (IllegalArgumentException | NullPointerException e) {
 			// A stage name no enum has, or a null where the format promised a string. Both are a
 			// damaged blob and neither is worth its own catch upstream.

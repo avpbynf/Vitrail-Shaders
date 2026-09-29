@@ -8,12 +8,16 @@ import dev.vitrail.Vitrail;
 
 import net.caffeinemc.mods.sodium.client.render.chunk.compile.pipeline.DefaultFluidRenderer;
 import net.caffeinemc.mods.sodium.client.model.color.ColorProvider;
+import net.caffeinemc.mods.sodium.client.model.light.LightPipeline;
+import net.caffeinemc.mods.sodium.client.model.quad.ModelQuadViewMutable;
+import net.caffeinemc.mods.sodium.client.model.quad.properties.ModelQuadFacing;
 import net.caffeinemc.mods.sodium.client.render.chunk.compile.buffers.ChunkModelBuilder;
 import net.caffeinemc.mods.sodium.client.render.chunk.terrain.material.Material;
 import net.caffeinemc.mods.sodium.client.render.chunk.translucent_sorting.TranslucentGeometryCollector;
 import net.caffeinemc.mods.sodium.client.world.LevelSlice;
 import net.minecraft.client.renderer.block.FluidModel;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.caffeinemc.mods.sodium.client.render.chunk.vertex.format.ChunkVertexEncoder;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.material.FluidState;
@@ -120,6 +124,19 @@ public abstract class DefaultFluidRendererMixin {
 	 * the water alone would keep a shading the pack applies again. The reference makes the same
 	 * change at the same call, {@code compat/sodium/mixin/MixinDefaultFluidRenderer.java:24-32},
 	 * and at that one alone of the three the method makes.
+	 * <p>
+	 * <strong>All three are taken, and the side one is told by the face it is handed.</strong> The
+	 * reference picks it as the third call, which is only the order Sodium wrote the top, the bottom
+	 * and the sides in, while the metadata accepts any 0.9.x: a release that moved the sides up
+	 * would have handed the full brightness to the bottom, which already has it, and left the sides
+	 * shaded twice without a word. The face says it outright. The top and the bottom are handed
+	 * {@code UP} and {@code DOWN} as constants, and the sides the direction of the loop over the four
+	 * horizontal ones, so a horizontal axis is the side faces and nothing else. The other two go
+	 * through unchanged, as they did when nothing reached them.
+	 * <p>
+	 * {@code require = 3} keeps the refusal the ordinal carried: a third call had to be there for it
+	 * to apply at all, and a method making fewer than three is one whose side faces have gone
+	 * somewhere this does not look.
 	 */
 	@ModifyArg(
 			method = "render",
@@ -131,11 +148,12 @@ public abstract class DefaultFluidRendererMixin {
 							+ "sodium/client/model/light/LightPipeline;Lnet/minecraft/core/Direction;"
 							+ "Lnet/caffeinemc/mods/sodium/client/model/quad/properties/"
 							+ "ModelQuadFacing;FLnet/caffeinemc/mods/sodium/client/model/color/"
-							+ "ColorProvider;Lnet/minecraft/world/level/material/FluidState;)V",
-					ordinal = 2),
-			require = 1)
-	private float vitrail$sideFaceAtFullBrightness(float brightness) {
-		return FaceShading.dropped() ? 1.0F : brightness;
+							+ "ColorProvider;Lnet/minecraft/world/level/material/FluidState;)V"),
+			require = 3)
+	private float vitrail$sideFaceAtFullBrightness(ModelQuadViewMutable quad, LevelSlice level,
+			BlockPos pos, LightPipeline lighter, Direction face, ModelQuadFacing facing,
+			float brightness, ColorProvider<FluidState> colours, FluidState fluid) {
+		return face.getAxis().isHorizontal() && FaceShading.dropped() ? 1.0F : brightness;
 	}
 
 	/** The path taken when nothing sorts this quad, which is every fluid the pack draws opaquely. */

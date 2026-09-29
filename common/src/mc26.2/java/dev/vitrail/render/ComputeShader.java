@@ -3,6 +3,7 @@ package dev.vitrail.render;
 import dev.vitrail.cache.ModuleCache;
 import dev.vitrail.glsl.LoadClock;
 import dev.vitrail.mixin.game.IntermediaryShaderModuleAccessor;
+import dev.vitrail.render.timing.ModuleCensus;
 
 import com.mojang.blaze3d.vulkan.VulkanBindGroupLayout;
 import com.mojang.blaze3d.vulkan.VulkanDevice;
@@ -118,6 +119,7 @@ public final class ComputeShader {
 			if (module == null) {
 				ByteBuffer spirv = compile.apply(source);
 				ModuleCache.building(label);
+				ModuleCensus.compiled(label, key);
 				if (spirv == null) {
 					return null;
 				}
@@ -130,6 +132,8 @@ public final class ComputeShader {
 				module = IntermediaryShaderModule.createFromSpirv(label,
 						RawLocals.patch(label, spirv));
 				ModuleCache.store(key, module);
+			} else {
+				ModuleCensus.served(label, key);
 			}
 
 			return compile(vulkan, module);

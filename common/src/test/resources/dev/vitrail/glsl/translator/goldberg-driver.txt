@@ -1,0 +1,72 @@
+--- goldberg-driver.fsh (FRAGMENT) ---
+#version 460 core
+#define <engine defines>
+layout(std140) uniform OfGlobals {
+	float frameTimeCounter;
+};
+uniform sampler2D noisetex;
+float ofHash(vec2 ofP) { uvec2 ofV = floatBitsToUint(ofP); uint ofN = (ofV.x * 1597334677u) ^ (ofV.y * 3812015801u); ofN ^= ofN >> 16u; ofN *= 2246822519u; ofN ^= ofN >> 13u; ofN *= 3266489917u; ofN ^= ofN >> 16u; return float(ofN) * 2.3283064365386963e-10; }
+float ofHash(vec3 ofP) { uvec3 ofV = floatBitsToUint(ofP); uint ofN = ofV.x ^ (ofV.y * 1597334677u) ^ (ofV.z * 3812015801u); ofN ^= ofN >> 16u; ofN *= 2246822519u; ofN ^= ofN >> 13u; ofN *= 3266489917u; ofN ^= ofN >> 16u; return float(ofN) * 2.3283064365386963e-10; }
+layout(location = 0) out vec4 ofFragData0;
+void ofOrderOutputs() { ofFragData0; }
+
+
+
+
+in vec2 texcoord;
+
+float hash12(vec2 p) {
+	return ofHash(p);
+}
+
+float hash13(vec3 p) {
+	return ofHash(p);
+}
+
+float grain(vec2 p) {
+	return fract(sin(dot(p, vec2(12.9898, 78.233 * frameTimeCounter))) * 43758.5453);
+}
+
+float other(vec2 p) {
+	return fract(sin(dot(p, vec2(1.0, 2.0))) * 100.0);
+}
+
+void main() { ofOrderOutputs();
+	float n = hash12(texcoord) + hash13(vec3(texcoord, 1.0)) + grain(texcoord) + other(texcoord);
+	ofFragData0 = vec4(vec3(n * 0.25), 1.0);
+}
+--- notes ---
+fragmentOutputs = 1
+dynamicFragData = 0
+uniformConflicts = 0
+shadowCalls = 0
+unwrappedShadow = 0
+strippedExtensions = 0
+depthEpilogue = 0
+alphaEpilogue = 0
+coverage = 0
+depthLookups = 0
+parameterLookups = 0
+pinnedLookups = 0
+unpinnedParameterLookups = 0
+fragCoordZ = 0
+fragCoordXyz = 0
+fragCoordUnhandled = 0
+fragDepthWrites = 0
+fragDepthUnhandled = 0
+conflictNames = []
+comparedSamplers = []
+hardwareCompared = []
+retypedSamplers = []
+storageBlocks = []
+volumeLookups = 0
+volumesLeftAlone = 0
+trigCalls = 0
+gameTextureMatrix = 0
+gameModelView = 0
+--- drawBuffers ---
+[]
+--- block ---
+float frameTimeCounter
+--- samplers ---
+sampler2D noisetex

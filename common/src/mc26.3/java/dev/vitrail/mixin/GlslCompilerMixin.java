@@ -10,11 +10,13 @@ import com.mojang.renderpearl.backend.api.SpvModule;
 import com.mojang.renderpearl.frontend.shaders.GlslCompiler;
 import com.mojang.renderpearl.frontend.shaders.SPIRVModule;
 import dev.vitrail.cache.ModuleCache;
+import dev.vitrail.cache.ModuleShare;
 import dev.vitrail.glsl.LoadClock;
 import dev.vitrail.render.PackNames;
 import dev.vitrail.render.RawLocals;
 import dev.vitrail.render.SamplerReach;
 import dev.vitrail.render.ShaderDebugInfo;
+import dev.vitrail.render.timing.ModuleCensus;
 import net.minecraft.client.renderer.ShaderDefines;
 import org.lwjgl.util.shaderc.Shaderc;
 import org.spongepowered.asm.mixin.Mixin;
@@ -30,18 +32,19 @@ import java.util.Map;
  * <p>
  * The 26.3 half. The compiler here is {@code GlslCompiler.compileToSpv}, which the pipeline builder
  * calls once per stage and which hands back a {@code SPIRVModule} reflected on demand, where 26.2's
- * {@code createIntermediary} reflected on the spot. The same three things happen at the matching
+ * {@code createIntermediary} reflected on the spot. The same four things happen at the matching
  * places:
  * <ul>
  * <li>the debug information is skipped where the options for one compile are built, since 26.3
  * builds them per compile rather than once in the constructor;</li>
  * <li>the zeroes and the stripped names are written into the copy of shaderc's output the module
  * is built around, before any reflection can read it;</li>
- * <li>the clock runs around the whole compile.</li>
+ * <li>{@link ModuleCache} is asked before the compile and handed what came out of it, so a unit it
+ * holds is never compiled at all;</li>
+ * <li>the clock runs around the whole compile, a served unit included.</li>
  * </ul>
- * What 26.2 also did here and this does not: serve a unit from {@link ModuleCache}, which keeps
- * nothing on this game yet, and ask shaderc for a geometry stage, which this game's pipeline has no
- * room for yet; both are said where they live.
+ * What 26.2 also did here and this does not: ask shaderc for a geometry stage, which this game's
+ * pipeline has no room for yet, as is said where that lives.
  */
 @Mixin(GlslCompiler.class)
 public abstract class GlslCompilerMixin {
@@ -110,15 +113,23 @@ public abstract class GlslCompilerMixin {
 	}
 
 	/**
-	 * Serves the unit from {@link ModuleCache} where it holds it, and otherwise compiles it, counts
-	 * it and keeps what came out, all under the state of the zero pass taken once at the head, so a
-	 * load flipping the switch meanwhile cannot patch one unit under two states nor store one
-	 * state's words under the other's key.
+	 * Serves the unit from the load's own {@link ModuleShare} where an earlier program had it made,
+	 * from {@link ModuleCache} where the disk holds it, and otherwise compiles it, counts it and
+	 * keeps what came out, all under the state of the zero pass taken once at the head, so a load
+	 * flipping the switch meanwhile cannot patch one unit under two states nor store one state's
+	 * words under the other's key.
 	 * <p>
 	 * A served unit is made into a module here, as the compiler makes one, and handed the samplers
 	 * its reflection leaves out, as a compiled one is where it is made: the words are the same
 	 * either way, so the reach read off them is too. The debug name is not keyed, carrying the load
-	 * number the disk key must not see.
+	 * number the disk key must not see; whether it is one of ours is, since that decides the
+	 * options {@link #vitrail$legacyOptions} hands shaderc and whether the two passes run at all.
+	 * <p>
+	 * <strong>A unit is claimed for the length of all three answers</strong>, so that a second
+	 * program asking for it while the first is being made waits and finds it in the table rather
+	 * than compiling it beside the first. This game's device keeps no module by any name, so this
+	 * is the one place a unit two programs share is seen to be one. Only this engine's units go
+	 * through the table: the game's own are compiled once each and are left as they were.
 	 */
 	@WrapMethod(method = "compileToSpv", require = 1)
 	private SpvModule vitrail$module(String name, String source, ShaderType type,
@@ -127,27 +138,61 @@ public abstract class GlslCompilerMixin {
 		RawLocals.begin();
 		try {
 			String filename = debugName(name);
-			String key = ModuleCache.keyOf(source, type.name(), vitrail$defines(defines));
-			ByteBuffer served = ModuleCache.lookup(key);
-			if (served != null) {
-				SPIRVModule module = new SPIRVModule(served, type);
-				SamplerReach.narrow(filename, served, module);
+			boolean ours = RawLocals.ours(filename);
+			String described = vitrail$defines(defines);
+			String key = ModuleCache.keyOf(source, type.name(), described, ours);
+			// The disk key where there is one, and the same digest made without a disk where
+			// there is none: a load with the cache switched off shares its units all the same.
+			String unit = !ours ? null : key != null ? key
+					: ModuleCache.shareKeyOf(source, type.name(), described, true);
+			String seen = key != null ? key : unit;
+			ModuleShare.Claim claim = ModuleShare.load().claim(unit);
+			try {
+				ByteBuffer served = ModuleCache.shared(unit);
+				if (served != null) {
+					ModuleCensus.shared(filename, seen);
 
-				return module;
+					return vitrail$made(filename, served, type);
+				}
+
+				served = ModuleCache.lookup(key);
+				if (served != null) {
+					ModuleCensus.served(filename, seen);
+					// Into the table before anything has read or rewritten the words, so the next
+					// program of this load with the same text does not read the file again.
+					ModuleCache.keep(unit, null, served);
+
+					return vitrail$made(filename, served, type);
+				}
+
+				// Counted before the call and not after it: a unit a pack broke throws out of the
+				// compile, and counting on the way back would leave that load short by exactly the
+				// units somebody is reading the log to find.
+				ModuleCache.building(filename);
+				ModuleCensus.compiled(filename, seen);
+				SpvModule built = original.call(name, source, type, defines, shaderSource);
+				ModuleCache.keep(unit, key, built.spv());
+
+				return built;
+			} finally {
+				claim.release();
 			}
-
-			// Counted before the call and not after it: a unit a pack broke throws out of the
-			// compile, and counting on the way back would leave that load short by exactly the
-			// units somebody is reading the log to find.
-			ModuleCache.building(filename);
-			SpvModule built = original.call(name, source, type, defines, shaderSource);
-			ModuleCache.store(key, built.spv());
-
-			return built;
 		} finally {
 			RawLocals.end();
 			LoadClock.module(System.nanoTime() - began);
 		}
+	}
+
+	/**
+	 * The module made of words the compiler did not compile, its reach narrowed as a compiled one's
+	 * is.
+	 */
+	@Unique
+	private static SPIRVModule vitrail$made(String filename, ByteBuffer words, ShaderType type) {
+		SPIRVModule module = new SPIRVModule(words, type);
+		SamplerReach.narrow(filename, words, module);
+
+		return module;
 	}
 
 	/**

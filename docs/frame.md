@@ -214,6 +214,13 @@ pack's; a pixel the game has drawn a feature onto compares closer and is the see
 wrote nothing at all the mask holds a value outside zero to one, which every real depth is in front
 of, so those pixels take the game's picture through the same comparison.
 
+"Equal" allows a few units in the last place, and it has to. The mask is filled from what the
+fragment stage sees and the attachment from what the rasteriser stores, and on a Mac the two part by
+one unit on some pixels of a sloped surface, in a pattern that repeats with the GPU's 32 pixel tile.
+Compared strictly, each of those pixels read as covered by the game: Photon's held item, whose
+first draw buffer is a packed gbuffer, carried a light dash on every tile boundary while the player
+walked. A feature the game really draws in front stands millions of times further off than that.
+
 That is one comparison for two questions, and the second one is what a flag could not answer. The
 game still draws pieces of its own in front of the pack's geometry, and they have to arrive; the
 pack's own geometry must not be repainted. Only a depth tells those two pixels apart.
@@ -230,7 +237,9 @@ So a flat, unlit mob is not a mask bug, and before reading it as one, check whic
 are looking at. The family goes through the pack out of the box, so the first question is whether
 somebody wrote `entities=off` in `vitrail/options.txt`, which hands every entity straight back to
 the game's shader. Failing that, an entity that still looks flat is one the pack's own program did
-not reach: the log names the reason at the moment it happens. Neither case is the coverage mask.
+not reach, or one whose family the pack-load worker could not read: the log names the reason at the
+moment it happens, and the settings screen says so as well for an unread family. Neither case is
+the coverage mask.
 
 ### What the entity door can carry, and what the mesh keeps out
 

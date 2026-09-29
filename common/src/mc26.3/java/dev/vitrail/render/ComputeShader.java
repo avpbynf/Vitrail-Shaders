@@ -2,6 +2,7 @@ package dev.vitrail.render;
 
 import dev.vitrail.cache.ModuleCache;
 import dev.vitrail.glsl.LoadClock;
+import dev.vitrail.render.timing.ModuleCensus;
 
 import com.mojang.renderpearl.api.pipeline.ShaderType;
 import com.mojang.renderpearl.backend.api.SpvModule;
@@ -67,6 +68,7 @@ public final class ComputeShader {
 		try {
 			ByteBuffer spirv = compile.apply(source);
 			ModuleCache.building(label);
+			ModuleCensus.compiled(label, null);
 			if (spirv == null) {
 				return null;
 			}

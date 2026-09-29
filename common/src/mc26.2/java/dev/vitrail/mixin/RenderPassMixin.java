@@ -2,6 +2,7 @@ package dev.vitrail.mixin;
 
 import dev.vitrail.render.GeometryHold;
 import dev.vitrail.render.ParticleDraw;
+import dev.vitrail.render.timing.FrameCensus;
 
 import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.systems.RenderPass;
@@ -34,9 +35,29 @@ public abstract class RenderPassMixin {
 		}
 	}
 
+	/**
+	 * Swaps the particle pipeline, and counts the bind for {@link FrameCensus}: this is the one place
+	 * every pipeline set on any pass goes through, the game's and Sodium's and this engine's, and what
+	 * it hands back is what the pass really holds.
+	 */
 	@ModifyVariable(method = "setPipeline", at = @At("HEAD"), argsOnly = true, require = 1)
 	private RenderPipeline vitrail$particlePipeline(RenderPipeline pipeline) {
-		return ParticleDraw.pipeline((RenderPass) (Object) this, pipeline);
+		RenderPipeline chosen = ParticleDraw.pipeline((RenderPass) (Object) this, pipeline);
+		FrameCensus.bind(this, chosen, chosen);
+
+		return chosen;
+	}
+
+	/**
+	 * Counts a draw for {@link FrameCensus}, under the family of the pipeline the pass holds. At the
+	 * head of every method that records one and reading none of their arguments, so the handler names
+	 * only the callback. Sodium's terrain draws never come through here: it records them into the
+	 * command buffer itself.
+	 */
+	@Inject(method = {"draw", "drawIndexed", "multiDraw", "multiDrawIndexed", "drawIndirect",
+			"drawIndexedIndirect", "drawMultipleIndexed"}, at = @At("HEAD"), require = 1)
+	private void vitrail$census(CallbackInfo callback) {
+		FrameCensus.draw(this);
 	}
 
 	@Inject(method = "bindTexture", at = @At("TAIL"), require = 1)

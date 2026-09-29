@@ -18,6 +18,8 @@ import dev.vitrail.render.pbr.PbrMap;
 import dev.vitrail.render.pbr.PbrTextures;
 import dev.vitrail.render.storage.StorageBuffers;
 import dev.vitrail.render.storage.StorageImages;
+import dev.vitrail.render.timing.FrameCensus;
+import dev.vitrail.render.timing.ModuleCensus;
 import dev.vitrail.render.timing.PassTimings;
 import dev.vitrail.uniform.ClipSpace;
 import dev.vitrail.uniform.TextSink;
@@ -52,7 +54,6 @@ import com.mojang.blaze3d.vertex.VertexFormatElement;
 import com.mojang.blaze3d.vulkan.VulkanRenderPipeline;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.BindGroupLayouts;
-import net.minecraft.client.renderer.MappableRingBuffer;
 import net.minecraft.resources.Identifier;
 
 import org.joml.Matrix4fc;
@@ -211,8 +212,8 @@ final class GeometryProgram {
 	private static final String OVERLAY = LegacyGlsl.OVERLAY_SAMPLER;
 
 	/**
-	 * The pass the answers that do NOT follow the draw's image are currently standing in, and the
-	 * program that put them there.
+	 * The pass the block and the answers that do NOT follow the draw's image are currently standing
+	 * in, and the program that put them there.
 	 * <p>
 	 * A bind writes a name into a map the pass keeps until it closes, allocating the pair it stores,
 	 * so a name whose answer cannot move inside a pass only has to be written once. Two things can
@@ -232,8 +233,13 @@ final class GeometryProgram {
 	 * against any of those, so nothing enforces it.
 	 * <p>
 	 * <strong>Settling raises what a collision would cost.</strong> A foreign write over one of
-	 * these names used to be undone by the next bind of the same program; it now stands for the
-	 * rest of the pass.
+	 * these names, or over the block's, stands for the rest of the pass: the next bind of the same
+	 * program does not put its own back.
+	 * <p>
+	 * What a bind of the program that is standing in the pass leaves out is the block and the storage
+	 * placeholders as well as those names, see {@link #bind}. So this is also what makes them safe to
+	 * leave out, and it is cleared wherever any of them could have moved: {@link #resolve},
+	 * {@link #rotate} and {@link #release}.
 	 */
 	private static RenderPass settledIn;
 
@@ -448,14 +454,43 @@ final class GeometryProgram {
 	 */
 	private final boolean gameTransforms;
 
-	private MappableRingBuffer block;
+	/**
+	 * Where this program's uniform block stands, which is a range of the ring every program of the
+	 * chain shares or a ring of its own where that has no room; the program asks it everything and does
+	 * not tell them apart. Null until the first prepare, and again after {@link #release}. See
+	 * {@link BlockRing}.
+	 */
+	private BlockRing.Slot block;
+
+	/** Where the chain's programs get their blocks from. */
+	private final BlockRing blocks;
+
+	/** How often this program's block was written in the frame in progress, for the frame census. */
+	private final FrameCensus.Block blockWrites = new FrameCensus.Block();
 
 	/** The whole block as one slice, and the buffer it was cut from. See {@link #blockSlice}. */
 	private GpuBufferSlice blockSlice;
 
 	private GpuBuffer blockSliceOf;
 
+	private int blockSliceAt;
+
 	private int blockSliceBytes;
+
+	/**
+	 * The slice this program last set as its block on the pass it is standing in, so that a bind
+	 * sets it again only when the ring has turned to another buffer under a pass that outlived the
+	 * turn. Dropped at {@link #resolve}, {@link #rotate} and {@link #release}.
+	 */
+	private GpuBufferSlice blockSent;
+
+	/**
+	 * What the bytes standing in the block's current buffer were written from, which is what a second
+	 * write of a frame is compared against. See {@link BlockStamp}. The turn it is keyed on is the
+	 * ring's, asked of the block; the stamp is cleared whenever the block is made again, and goes with
+	 * it.
+	 */
+	private final BlockStamp written = new BlockStamp();
 
 	/**
 	 * The device's one-texel constants, for a sprite the resource pack ships nothing for and for
@@ -531,8 +566,9 @@ final class GeometryProgram {
 
 	GeometryProgram(Pass pass, PackProgram.Loaded loaded, PackValues values, int load,
 			VertexFormat format, List<ChainPlan.Attachment> writes, ColorTargets targets,
-			boolean chainRuns) {
+			BlockRing blocks, boolean chainRuns) {
 		this.pass = pass;
+		this.blocks = blocks;
 		this.path = loaded.path();
 		this.gameTransforms = loaded.readsGameTransforms();
 		this.blockLabel = () -> "Vitrail " + pass.family() + " OfGlobals";
@@ -815,6 +851,7 @@ final class GeometryProgram {
 		}
 
 		this.pipeline = part(builder);
+		FrameCensus.describe(this.pipeline, pass.family());
 
 		// Filed against the pipeline and not the program, because the pipeline is what the
 		// descriptor walk can see when it has to answer for a name.
@@ -829,6 +866,15 @@ final class GeometryProgram {
 		if (fragment == null) {
 			this.broken = true;
 		}
+
+		// The two texts the source below answers with, the geometry stage a device that runs one
+		// is handed as a module of its own, and the mesh layout the pipeline reads: what decides
+		// whether a program is a compile another program already made. The stage is asked for
+		// here and not read off the program: where it is folded into the fragment text the
+		// fragment text already carries it, and only a stage the compiler is handed by itself is
+		// one more input.
+		ModuleCensus.built(pass.family(), vertexId, fragmentId, vertex, fragment,
+				GeometryStage.shipped(this.pipeline), format);
 
 		this.source = GraphicsApi.source((id, type) -> {
 			if (type == ShaderType.FRAGMENT) {
@@ -1032,8 +1078,8 @@ final class GeometryProgram {
 		this.atlas = atlas;
 		ensureConstants(device);
 		if (this.block == null) {
-			this.block = new MappableRingBuffer(this.blockLabel,
-					GpuBuffer.USAGE_UNIFORM | GpuBuffer.USAGE_MAP_WRITE, blockBytes());
+			this.block = this.blocks.open(device, this.blockLabel, blockBytes());
+			this.written.clear();
 		}
 
 		// After the constants and never before them: what a name with no image is answered with is a
@@ -1267,6 +1313,7 @@ final class GeometryProgram {
 		}
 
 		RenderPipeline built = part(builder);
+		FrameCensus.describe(built, this.pass.family());
 
 		// The comparison note is keyed on the pipeline object, not read off its states, so it is
 		// the one answer a rebuild does not carry by itself. Left unfiled, the descriptor walk
@@ -1361,11 +1408,21 @@ final class GeometryProgram {
 	 * were settled by {@link #resolve}, at the one point of a pass that stands outside it, and this
 	 * walks them in order out of an array rather than asking for each of them by name.
 	 * <p>
-	 * <strong>And only those are WRITTEN here, past the first bind of a pass.</strong> A pack's
-	 * geometry program declares ten to twenty five names of which two to four move with the draw,
-	 * and the pass holds what it was told until it closes, so the rest were a pair allocated and a
-	 * map entry replaced by its own value, once for every draw of the frame. {@link #settledIn}
-	 * carries what makes that safe.
+	 * <strong>And past the first bind of a pass, the block and the names that answer the same for
+	 * the whole pass are not WRITTEN again.</strong> A pack's geometry program declares ten to
+	 * twenty five names of which two to four move with the draw, and the pass holds what it was
+	 * told until it closes. The block, the storage placeholders and those names are written when
+	 * the program starts standing in a pass, and the block again when the slice is not the one last
+	 * set, which is the ring having turned under a pass that outlived the turn. Writing an equal
+	 * value again allocates a pair, replaces a map entry by its own value and, on both games, marks
+	 * the descriptors dirty. {@link #settledIn} carries what makes that safe.
+	 * <p>
+	 * The names that follow the draw's image are written at every bind, being the draw's own. The
+	 * game folds consecutive draws of one render type into one draw, so the next draw of a run
+	 * brings another image and the descriptors are owed a push whatever is compared here.
+	 * <p>
+	 * {@code keepRedoneWork} writes the block and the storage placeholders at every bind, so that
+	 * one jar measures the difference.
 	 */
 	@SuppressWarnings("ReferenceEquality")
 	void bind(RenderPass pass) {
@@ -1386,22 +1443,37 @@ final class GeometryProgram {
 							: "");
 		}
 
-		pass.setUniform(UNIFORM_BLOCK, blockSlice());
-		StorageBuffers.bind(pass, this.storage);
-
-		// The rest are already standing in this pass, put there by this program's own last bind into
-		// it, and writing them again would allocate a pair and put back what the map already holds.
-		// {@link #settledIn} says what can undo that and why nothing else can.
+		// What this program put in the pass at its last bind into it is still there, and writing it
+		// again would allocate a pair, put back what the map already holds and leave the next draw a
+		// descriptor push to make. settledIn says what can undo it and why nothing else can.
+		boolean keep = PassTimings.keepRedoneWork();
 		boolean settle = settledIn != pass || settled != this;
 		settledIn = pass;
 		settled = this;
 
+		// The slice as well as the pass: the ring turns once a frame and a pass that outlived the turn
+		// would hold the buffer before it, which the identity of the slice says without asking when.
+		GpuBufferSlice slice = blockSlice();
+		if (settle || keep || slice != this.blockSent) {
+			FrameCensus.programBound();
+			FrameCensus.blockSet(pass, UNIFORM_BLOCK, slice, !settle);
+			pass.setUniform(UNIFORM_BLOCK, slice);
+			this.blockSent = slice;
+			StorageBuffers.bind(pass, this.storage);
+		} else {
+			FrameCensus.programKept();
+		}
+
 		for (Sampled one : this.following) {
-			GraphicsApi.bindTexture(pass, one.name, imageView(one), imageSampler(one));
+			GpuTextureView view = imageView(one);
+			GpuSampler sampler = imageSampler(one);
+			FrameCensus.textureSet(pass, one.name, view, sampler, !settle);
+			GraphicsApi.bindTexture(pass, one.name, view, sampler);
 		}
 
 		if (settle) {
 			for (Sampled one : this.settledOnce) {
+				FrameCensus.textureSet(pass, one.name, one.view, one.state, false);
 				GraphicsApi.bindTexture(pass, one.name, one.view, one.state);
 			}
 		}
@@ -1442,6 +1514,8 @@ final class GeometryProgram {
 			one.servedFor = null;
 			one.served = null;
 		}
+
+		this.blockSent = null;
 	}
 
 	/**
@@ -1845,8 +1919,21 @@ final class GeometryProgram {
 		return this.shadowArea;
 	}
 
-	/** Rotates the ring buffer. Called once the frame's terrain draw has been recorded. */
+	/**
+	 * Rotates the ring buffer where this program has one of its own. Called once the frame's terrain
+	 * draw has been recorded.
+	 * <p>
+	 * A pass never outlives the frame that opened it, but the block this program set on one is the
+	 * buffer the ring is leaving, so what is standing is dropped here rather than trusted to that.
+	 * The ring every program shares is turned by the chain, once, and the same holds for it.
+	 */
 	void rotate() {
+		if (settled == this) {
+			settled = null;
+			settledIn = null;
+		}
+
+		this.blockSent = null;
 		if (this.block != null) {
 			this.block.rotate();
 		}
@@ -1878,10 +1965,12 @@ final class GeometryProgram {
 			this.block = null;
 		}
 
-		// With the ring and not after it: a slice outliving the buffer it names is memory that reads
+		// With the block and not after it: a slice outliving the range it names is memory that reads
 		// as valid.
 		this.blockSlice = null;
 		this.blockSliceOf = null;
+		this.blockSent = null;
+		this.written.clear();
 
 		// The reference is dropped, the textures are not: they are the device's, not this
 		// program's, and re-clearing them once per program was about ninety of the standalone
@@ -1945,38 +2034,65 @@ final class GeometryProgram {
 	/**
 	 * The whole of this program's uniform block, as the one slice that names it.
 	 * <p>
-	 * Both its arguments are fixed for as long as the ring hands back the same buffer: the offset is
-	 * nought and the length is the block's own size, which is what the ring was built against. Built
-	 * again at every bind, it was one object per entity submitted and per Sodium region drawn, twice
-	 * over on a frame with a shadow map. Kept beside the buffer it was cut from, it is one a frame:
-	 * the ring turns once, at the close of the frame, and a turn is the only thing that can make the
-	 * old one name the wrong memory.
+	 * Its arguments are fixed for as long as the ring hands back the same buffer: the offset is where
+	 * the block's range starts, nought for a ring of its own, and the length is the block's own size,
+	 * which is what the range or the ring was made for. Built again at every bind, it was one object
+	 * per entity submitted and per Sodium region drawn, twice over on a frame with a shadow map. Kept
+	 * beside the buffer it was cut from, it is one a frame: the ring turns once, at the close of the
+	 * frame, and a turn is the only thing that can make the old one name the wrong memory.
 	 * <p>
-	 * {@link #release} drops it with the ring, so a slice never outlives the buffer under it.
+	 * {@link #release} drops it with the block, so a slice never outlives the range under it.
 	 */
 	private GpuBufferSlice blockSlice() {
-		GpuBuffer buffer = this.block.currentBuffer();
+		GpuBuffer buffer = this.block.buffer();
+		int at = this.block.offset();
 		if (PassTimings.keepRedoneWork()) {
 			PassTimings.censusSlice();
 
-			return buffer.slice(0, blockBytes());
+			return buffer.slice(at, blockBytes());
 		}
 
 		int bytes = blockBytes();
-		// The length as well as the buffer, though only the buffer can move today: the block's size
-		// is settled at translation and a translation goes through release, which drops the ring.
-		// Comparing it costs one integer and takes a silent wrong answer off the table if that ever
-		// stops being true.
-		if (this.blockSlice == null || this.blockSliceOf != buffer || this.blockSliceBytes != bytes) {
+		// The offset and the length as well as the buffer, though only the buffer can move today: the
+		// block's size is settled at translation and a translation goes through release, which drops
+		// the block and the range with it. Comparing them costs two integers and takes a silent wrong
+		// answer off the table if that ever stops being true.
+		if (this.blockSlice == null || this.blockSliceOf != buffer || this.blockSliceAt != at
+				|| this.blockSliceBytes != bytes) {
 			PassTimings.censusSlice();
-			this.blockSlice = buffer.slice(0, bytes);
+			this.blockSlice = buffer.slice(at, bytes);
 			this.blockSliceOf = buffer;
+			this.blockSliceAt = at;
 			this.blockSliceBytes = bytes;
 		}
 
 		return this.blockSlice;
 	}
 
+	/**
+	 * Puts this program's block in the ring's current buffer, unless the bytes standing there are the
+	 * ones this write would put.
+	 * <p>
+	 * A program is prepared once for each run of its draws and the ring turns once a frame, so a
+	 * program with three runs in a frame writes into one buffer three times. {@link BlockStamp} says
+	 * which of those writes put back what was there: the same turn, the same version of the frame's
+	 * values, and the same four values handed in by the pass. A pass that hands in another set, the
+	 * hand after a mob or a second sky element, writes again and so does every first write of a
+	 * frame.
+	 * <p>
+	 * <strong>The turn is what makes a skipped write safe in a ring every program shares.</strong> A
+	 * stamp holds only at the turn it was made at, and a turn is another buffer, so a write is
+	 * skipped only where the range in the buffer in hand is the one the stamp was made for, and the
+	 * first write of every frame goes in whatever the frame before wrote. The range is this program's
+	 * alone for as long as it holds it, so no other program's write can have changed the bytes the
+	 * stamp says are there.
+	 * <p>
+	 * <strong>The setters run either way.</strong> They put the pass's values in a state that every
+	 * program shares, and the alpha reference is left standing for the chain's composites to read,
+	 * {@link dev.vitrail.uniform.ViewSource#passAlphaTest} saying which one, so what the chain reads
+	 * is the last program prepared's whether or not that one wrote. {@code keepRedoneWork} writes
+	 * every block.
+	 */
 	private void writeBlock() {
 		// Before the block and never once for the run: the two conventions alternate inside one
 		// frame now that the shadow map is ours and the game's targets are not, and what a vertex
@@ -1988,11 +2104,23 @@ final class GeometryProgram {
 		this.values.passAlphaTest(this.loaded.alphaTest().reference());
 		this.values.renderStage(this.pass.stage());
 
-		try (GpuBufferSlice.MappedView view = this.block.currentBuffer().map(false, true)) {
+		FrameCensus.blockPlaced(this.blockWrites, this.block.shared());
+		long version = this.values.version();
+		long turn = this.block.turn();
+		if (!PassTimings.keepRedoneWork() && this.written.holds(turn, version, this.modelView,
+				this.bob, this.projection, this.passColour)) {
+			return;
+		}
+
+		FrameCensus.geometryBlockWritten(this.blockWrites);
+		try (GpuBufferSlice.MappedView view = this.block.map()) {
 			ByteBuffer data = view.data();
 			data.position(0);
 			this.uniforms.write(Std140Builder.intoBuffer(data), this.values.world());
 		}
+
+		this.written.stamp(turn, version, this.modelView, this.bob, this.projection,
+				this.passColour);
 	}
 
 	private void ensureConstants(GpuDevice device) {
@@ -2238,10 +2366,12 @@ final class GeometryProgram {
 	 * opaque LODs; no program of the eight-pack corpus makes that read, the readers being deferreds
 	 * and composites throughout.
 	 * <p>
-	 * The far plane is also the whole answer while the pack is not drawing the far terrain: the
-	 * image is only taken on the frames it really drew, so a session without Distant Horizons, or a
-	 * frame its rendering switch is off on, reads white here exactly as it always did, and every
-	 * Distant Horizons branch of the pack stays shut.
+	 * The far plane is also the whole answer while the pack is not drawing the far terrain. A
+	 * session without Distant Horizons, or a frame its rendering switch is off on, has no image
+	 * taken and reads white here exactly as it always did; a frame with the far terrain there and
+	 * nothing of it in view has the image, filled with the far plane by
+	 * {@link PackDepth#takeDistantNothing}. Either way every Distant Horizons branch of the pack
+	 * stays shut.
 	 */
 	private GpuTextureView distantDepth() {
 		if (this.pass.afterDeferred()) {

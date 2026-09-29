@@ -1,0 +1,72 @@
+--- lookups-pinned.fsh (FRAGMENT) ---
+#version 460 core
+#define <engine defines>
+uniform sampler2D colortex0;
+uniform sampler2D depthtex0;
+uniform sampler3D lut;
+uniform samplerCube sky;
+uniform sampler1D ramp;
+layout(location = 0) out vec4 ofFragData0;
+void ofOrderOutputs() { ofFragData0; }
+
+
+
+
+
+
+
+in vec2 uv;
+
+void main() { ofOrderOutputs();
+	vec4 a = textureLod(colortex0, uv, 0.0);
+	vec4 b = textureLod(colortex0, uv,0.0);
+	vec4 c = textureProj(colortex0, vec3(uv, 1.0));
+	vec4 d = textureLod(colortex0, uv, 0.0);
+	vec4 e = textureLod(colortex0, uv, 0.0);
+	vec4 f = textureLodOffset(colortex0, uv, 0.0, ivec2(1, 0));
+	vec4 g = textureLodOffset(colortex0, uv,0.0, ivec2(0, 1));
+	vec4 h = texelFetch(colortex0, ivec2(gl_FragCoord.xy), 0);
+	vec4 i = textureLod(sky, vec3(uv, 1.0), 0.0);
+	vec4 j = textureLod(ramp, uv.x, 0.0) + textureLod(lut, vec3(uv, 0.5), 0.0) + textureLod(lut, vec3(uv, 0.5),0.0);
+	vec4 k = textureProjLod(colortex0, vec3(uv, 1.0), 0.0) + texelFetch(lut, ivec3(1), 0);
+	float depth = textureLod(depthtex0, uv, 0.0).r;
+	ofFragData0 = a + b + c + d + e + f + g + h + i + j + k + depth;
+}
+--- notes ---
+fragmentOutputs = 1
+dynamicFragData = 0
+uniformConflicts = 0
+shadowCalls = 0
+unwrappedShadow = 0
+strippedExtensions = 0
+depthEpilogue = 0
+alphaEpilogue = 0
+coverage = 0
+depthLookups = 1
+parameterLookups = 0
+pinnedLookups = 11
+unpinnedParameterLookups = 0
+fragCoordZ = 0
+fragCoordXyz = 0
+fragCoordUnhandled = 0
+fragDepthWrites = 0
+fragDepthUnhandled = 0
+conflictNames = []
+comparedSamplers = []
+hardwareCompared = []
+retypedSamplers = []
+storageBlocks = []
+volumeLookups = 0
+volumesLeftAlone = 0
+trigCalls = 0
+gameTextureMatrix = 0
+gameModelView = 0
+--- drawBuffers ---
+[]
+--- block ---
+--- samplers ---
+sampler2D colortex0
+sampler2D depthtex0
+sampler3D lut
+samplerCube sky
+sampler1D ramp

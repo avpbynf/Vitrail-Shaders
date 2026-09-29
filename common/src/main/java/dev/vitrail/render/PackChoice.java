@@ -1,5 +1,6 @@
 package dev.vitrail.render;
 
+import dev.vitrail.cache.ModuleShare;
 import dev.vitrail.glsl.LoadClock;
 import dev.vitrail.glsl.PackProgram;
 import dev.vitrail.glsl.TranslationCache;
@@ -135,6 +136,10 @@ public final class PackChoice {
 		// workers are still translating.
 		LoadClock.reset();
 		TranslationCache.reset();
+		// The units the last load made are not this load's to share: emptied where a load begins and
+		// where its warm-up ends, so a table never holds more than the distinct texts of one pack.
+		// A unit asked for after this is made or read again, and comes out the same.
+		ModuleShare.load().clear();
 		// The storage blocks the translator files away, emptied at the head of a load and NOT beside
 		// the CustomImages line in release(), though the two are installed on the same line.
 		//

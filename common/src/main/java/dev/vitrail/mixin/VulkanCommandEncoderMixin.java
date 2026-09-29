@@ -4,6 +4,8 @@ import dev.vitrail.render.MipmapCommands;
 import dev.vitrail.render.timing.PassBarrier;
 import dev.vitrail.Vitrail;
 
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.mojang.blaze3d.textures.GpuTexture;
 import com.mojang.blaze3d.vulkan.VulkanCommandEncoder;
 import com.mojang.blaze3d.vulkan.VulkanConst;
@@ -26,7 +28,6 @@ import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.gen.Invoker;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import java.util.function.Supplier;
@@ -89,22 +90,30 @@ public abstract class VulkanCommandEncoderMixin implements MipmapCommands {
 	 * nothing in it names the ATTACHMENT writes of the same pass. The pack's compute samples the
 	 * shadow map through the same views the graphics passes bind, and shadowtex0 is a depth
 	 * attachment we wrote.
+	 * <p>
+	 * <strong>Wrapped and not redirected, because a redirect owns the call.</strong> A second mod
+	 * redirecting the same barrier would stop the game at startup with both installed, every config
+	 * here requiring its injections. A wrap chains instead. The wide road hands the call on to
+	 * whatever stands behind it, which in the bare game is the private barrier, and that one only
+	 * fetches the command buffer and issues the static full barrier. The narrow road replaces the
+	 * barrier and so stops the chain. That is the whole of what it is for, and it happens on our own
+	 * passes alone.
 	 */
-	@Redirect(method = "submitRenderPass", at = @At(value = "INVOKE",
+	@WrapOperation(method = "submitRenderPass", at = @At(value = "INVOKE",
 			target = "Lcom/mojang/blaze3d/vulkan/VulkanCommandEncoder;memoryBarrier("
 					+ "Lorg/lwjgl/system/MemoryStack;)V"),
 			require = 1)
-	private void vitrail$afterPass(VulkanCommandEncoder self, MemoryStack stack) {
+	private void vitrail$afterPass(VulkanCommandEncoder self, MemoryStack stack,
+			Operation<Void> original) {
 		Supplier<String> label = this.vitrail$closingLabel;
 		this.vitrail$closingLabel = null;
-		VkCommandBuffer commands = vitrail$commandBuffer();
 		// The wide wait first, so that arming it takes every pass back to what the game does and
 		// leaves nothing of the narrow one standing. {@link PassBarrier} carries why that switch
 		// exists at all.
 		if (label != null && !PassBarrier.full() && vitrail$ours(label)) {
-			vitrail$framebufferBarrier(commands, stack);
+			vitrail$framebufferBarrier(vitrail$commandBuffer(), stack);
 		} else {
-			VulkanCommandEncoder.memoryBarrier(commands, stack);
+			original.call(self, stack);
 		}
 	}
 

@@ -158,16 +158,32 @@ public final class ExprFunctions {
 			ExprFunctions.<II2BFunction>addBooleanVectorizable("equals", (a, b) -> a == b);
 			ExprFunctions.<FF2BFunction>add("equals", (a, b) -> a == b);
 
-			ExprFunctions.addBinaryToBooleanOpJOML("equal", VectorType.VEC2, false, Vector2f::equals);
-			ExprFunctions.addBinaryToBooleanOpJOML("equal", VectorType.VEC3, false, Vector3f::equals);
-			ExprFunctions.addBinaryToBooleanOpJOML("equal", VectorType.VEC4, false, Vector4f::equals);
+			// Float vectors, one boolean for the whole vector, under equals, under equal because the
+			// note at the top of this class names it, and under == and != through the operator
+			// table. Each group of three sits after the scalar lines of the operator it extends.
+			// The components compare as the scalar == does: -0.0 equals 0.0 and NaN equals nothing,
+			// where JOML's equals has it the other way. This departs from Iris, whose vector
+			// comparisons (parsing/IrisFunctions.java:146-155) declare a vector as their result and
+			// share one name, so a call wanting a boolean, which is every use there is, resolves to
+			// nothing there and the declaration is dropped. The reference therefore never answers a
+			// comparison of two vectors, so no pack can have been tuned against one. What it costs
+			// the image: a pack comparing two vectors draws with a boolean where Iris drops the
+			// declaration and its program reads nought, and no declaration of BSL, Bliss, Photon
+			// or either Complementary compares two.
+			ExprFunctions.addBinaryToBooleanOpJOML("equals", VectorType.VEC2, false, ExprFunctions::sameComponents);
+			ExprFunctions.addBinaryToBooleanOpJOML("equals", VectorType.VEC3, false, ExprFunctions::sameComponents);
+			ExprFunctions.addBinaryToBooleanOpJOML("equals", VectorType.VEC4, false, ExprFunctions::sameComponents);
+
+			ExprFunctions.addBinaryToBooleanOpJOML("equal", VectorType.VEC2, false, ExprFunctions::sameComponents);
+			ExprFunctions.addBinaryToBooleanOpJOML("equal", VectorType.VEC3, false, ExprFunctions::sameComponents);
+			ExprFunctions.addBinaryToBooleanOpJOML("equal", VectorType.VEC4, false, ExprFunctions::sameComponents);
 
 			ExprFunctions.<II2BFunction>addBooleanVectorizable("notEquals", (a, b) -> a != b);
 			ExprFunctions.<FF2BFunction>add("notEquals", (a, b) -> a != b);
 
-			ExprFunctions.addBinaryToBooleanOpJOML("equal", VectorType.VEC2, true, Vector2f::equals);
-			ExprFunctions.addBinaryToBooleanOpJOML("equal", VectorType.VEC3, true, Vector3f::equals);
-			ExprFunctions.addBinaryToBooleanOpJOML("equal", VectorType.VEC4, true, Vector4f::equals);
+			ExprFunctions.addBinaryToBooleanOpJOML("notEquals", VectorType.VEC2, true, ExprFunctions::sameComponents);
+			ExprFunctions.addBinaryToBooleanOpJOML("notEquals", VectorType.VEC3, true, ExprFunctions::sameComponents);
+			ExprFunctions.addBinaryToBooleanOpJOML("notEquals", VectorType.VEC4, true, ExprFunctions::sameComponents);
 
 			ExprFunctions.<II2BFunction>add("lessThanOrEquals", (a, b) -> a <= b);
 			ExprFunctions.<FF2BFunction>add("lessThanOrEquals", (a, b) -> a <= b);
@@ -286,10 +302,22 @@ public final class ExprFunctions {
 				// ExprFunctions.addUnaryOpJOML("frac", VectorType.VEC4, Vector4f::??);
 
 				// optifine
-				// TODO: why does Math.round give an int?
-				// ExprFunctions.<F2FFunction>addVectorizable("round", (a) -> (float) Math.round(a));
-				// TODO maybe add round with a specifyable precission?
-				// ExprFunctions.<F2IFunction>addVectorizable("round", (a) -> (int) Math.round(a));
+				// OptiFine's round is Java's: Math.round of a float, widened back to a float
+				// (FunctionType.eval, case ROUND). So a half goes up, towards positive infinity:
+				// round(1.5) is 2 and round(-1.5) is -1, where GLSL leaves the direction of a half
+				// to the driver. The int form is there for an int declaration, as floor's is. Unlike
+				// floor and ceil above it has no vector form: OptiFine documents round(x) for a
+				// scalar and lists no vector function but the vec2, vec3 and vec4 constructors, so
+				// there is none to follow.
+				// Iris leaves both lines commented out (parsing/IrisFunctions.java:274-277) and
+				// resolves no call of round at all, so a declaration that uses it is dropped there
+				// with a "No such function" and its program reads nought. It answers here, as it
+				// does under OptiFine, whose list at the top of this class names it: nothing can
+				// have been tuned against a value the reference never gives. What it costs the
+				// image: a pack that calls round draws with its value where it had nought, and
+				// no declaration of BSL, Bliss, Photon or either Complementary calls it.
+				ExprFunctions.<F2FFunction>add("round", (a) -> (float) Math.round(a));
+				ExprFunctions.<F2IFunction>add("round", Math::round);
 
 
 				// mod is also already an operator
@@ -311,7 +339,16 @@ public final class ExprFunctions {
 				ExprFunctions.addBinaryOpJOML("max", VectorType.VEC4, Vector4f::max);
 
 				{
-					// Fake vararg
+					// Fake vararg. Each loop reads its arguments by their own index, and that is a
+					// divergence: Iris reads params[1] on every turn of all four
+					// (parsing/IrisFunctions.java:311, :328, :345, :362), so that min(3, 2, 1) is 2
+					// there and nothing past the second argument is ever read. That is not a
+					// defect a pack can be tuned against, its answer following the order the values
+					// were listed in rather than the values, and the list at the top of this class
+					// is OptiFine's, which compares every argument (FunctionType.getMin) for the
+					// same pack. What it costs the image: a pack whose third or later value is the
+					// smallest, or the largest, now draws with that one. No declaration of BSL,
+					// Bliss, Photon or either Complementary calls min or max with more than two.
 					for (int length = 3; length <= 16; length++) {
 						{
 							// min float
@@ -323,7 +360,7 @@ public final class ExprFunctions {
 									params[0].evaluateTo(context, functionReturn);
 									float min = functionReturn.floatReturn;
 									for (int i = 1; i < params.length; i++) {
-										params[1].evaluateTo(context, functionReturn);
+										params[i].evaluateTo(context, functionReturn);
 										min = Math.min(min, functionReturn.floatReturn);
 									}
 									functionReturn.floatReturn = min;
@@ -340,7 +377,7 @@ public final class ExprFunctions {
 									params[0].evaluateTo(context, functionReturn);
 									float max = functionReturn.floatReturn;
 									for (int i = 1; i < params.length; i++) {
-										params[1].evaluateTo(context, functionReturn);
+										params[i].evaluateTo(context, functionReturn);
 										max = Math.max(max, functionReturn.floatReturn);
 									}
 									functionReturn.floatReturn = max;
@@ -357,7 +394,7 @@ public final class ExprFunctions {
 									params[0].evaluateTo(context, functionReturn);
 									int min = functionReturn.intReturn;
 									for (int i = 1; i < params.length; i++) {
-										params[1].evaluateTo(context, functionReturn);
+										params[i].evaluateTo(context, functionReturn);
 										min = Math.min(min, functionReturn.intReturn);
 									}
 									functionReturn.intReturn = min;
@@ -374,7 +411,7 @@ public final class ExprFunctions {
 									params[0].evaluateTo(context, functionReturn);
 									int max = functionReturn.intReturn;
 									for (int i = 1; i < params.length; i++) {
-										params[1].evaluateTo(context, functionReturn);
+										params[i].evaluateTo(context, functionReturn);
 										max = Math.max(max, functionReturn.intReturn);
 									}
 									functionReturn.intReturn = max;
@@ -503,8 +540,24 @@ public final class ExprFunctions {
 												params[i + 1].evaluateTo(context, functionReturn);
 												return;
 											}
-											params[finalLength].evaluateTo(context, functionReturn);
 										}
+
+										// Read once, and only when no condition held. Iris reads
+										// it inside the loop (parsing/IrisFunctions.java:491),
+										// once for every condition that fails and before a later
+										// one wins. The value still comes out right, the winning
+										// branch being read last, but a smooth() written there
+										// steps once per failed condition on every frame and
+										// fades that many times faster, and a random() draws
+										// that many times. OptiFine reads it once, after the
+										// loop, and so does this. What it costs the image is
+										// the fade of such a smooth(), now at the rate the pack
+										// wrote; a fallback with nothing in it that steps gives
+										// the same value either way. Photon's
+										// moon_phase_brightness is the one long if in BSL,
+										// Bliss, Photon and either Complementary, and its
+										// fallback is a constant, so none of them changes.
+										params[finalLength].evaluateTo(context, functionReturn);
 									}
 								});
 							}
@@ -900,11 +953,25 @@ public final class ExprFunctions {
 		functions = builder.build();
 	}
 
+	/**
+	 * A function applied component by component, one per size of vector.
+	 * <p>
+	 * Registered as a supplier for the same reason as {@link #addUnaryOpJOML}, though what one of
+	 * these keeps is its operands rather than its answer: it parks each evaluated argument in a
+	 * field before it walks the components. Shared between call sites, as Iris shares it
+	 * ({@code parsing/IrisFunctions.java:1049}, and {@code :1066} for the boolean fold below), the
+	 * inner sum of {@code a + (b + c)} parks {@code b} where the outer one had parked {@code a},
+	 * and the outer one then adds {@code b}. What that costs the image: an integer vector reaches a
+	 * declaration only through a comparison or an {@code if}, and none of BSL, Bliss, Photon or
+	 * either Complementary builds one.
+	 */
 	static <T extends TypedFunction> void addVectorized(String name, T function) {
 		if (function.getReturnType() instanceof Type.Primitive) {
-			add(name, new VectorizedFunction(function, 2));
-			add(name, new VectorizedFunction(function, 3));
-			add(name, new VectorizedFunction(function, 4));
+			for (int size = 2; size <= 4; size++) {
+				int length = size;
+				builder.addDynamicFunction(name, new VectorType.ArrayVector(function.getReturnType(), length),
+					() -> new VectorizedFunction(function, length));
+			}
 		} else {
 			throw new IllegalArgumentException(name + " is not vectorizable");
 		}
@@ -915,20 +982,43 @@ public final class ExprFunctions {
 		addVectorized(name, function);
 	}
 
+	/** The same, folding the components into one boolean. It parks its operands as well. */
 	static <T extends TypedFunction> void addBooleanVectorizable(String name, T function) {
 		assert function.getReturnType().equals(Type.Boolean);
 		add(name, function);
 		if (function.getReturnType() instanceof Type.Primitive) {
-			add(name, new BooleanVectorizedFunction(function, 2));
-			add(name, new BooleanVectorizedFunction(function, 3));
-			add(name, new BooleanVectorizedFunction(function, 4));
+			for (int size = 2; size <= 4; size++) {
+				int length = size;
+				builder.addDynamicFunction(name, Type.Boolean,
+					() -> new BooleanVectorizedFunction(function, length));
+			}
 		} else {
 			throw new IllegalArgumentException(name + " is not vectorizable");
 		}
 	}
 
+	/**
+	 * A function of one float vector, answering one.
+	 * <p>
+	 * The answer is written into a vector the function keeps, and that is why this registers a
+	 * supplier rather than an instance: the resolver asks it once per place an expression calls
+	 * the function, so each call site gets a vector of its own, as each {@code smooth()} gets an
+	 * accumulator of its own. One instance shared by every call site, which is what Iris registers
+	 * ({@code parsing/IrisFunctions.java:1074}, and {@code :1093} and {@code :1115} for the two
+	 * below), hands every call the same vector, and in {@code abs(a) + abs(b)} the second call
+	 * overwrites the first answer before the sum reads it: the sum is twice {@code abs(b)}.
+	 * <p>
+	 * That is a divergence, and not from anything a pack can have been tuned against: the vector
+	 * functions are the reference's own addition to OptiFine's list, and what it answers for two
+	 * calls in one expression is not what the pack wrote. What it costs the image is nothing among
+	 * the packs read here, no declaration of BSL, Bliss, Photon or either Complementary calling one
+	 * of these twice.
+	 * <p>
+	 * An answer still lives only until its own call site runs again, which is why a declaration
+	 * copies its value out ({@code CustomUniforms.Node}).
+	 */
 	static <T> void addUnaryOpJOML(String name, VectorType.JOMLVector<T> type, BiConsumer<T, T> function) {
-		builder.add(name, new AbstractTypedFunction(
+		builder.addDynamicFunction(name, type, () -> new AbstractTypedFunction(
 			type,
 			new Type[]{type}
 		) {
@@ -946,8 +1036,9 @@ public final class ExprFunctions {
 		});
 	}
 
+	/** A function of two float vectors, one answer vector per call site as {@link #addUnaryOpJOML}. */
 	static <T> void addBinaryOpJOML(String name, VectorType.JOMLVector<T> type, TriConsumer<T, T, T> function) {
-		builder.add(name, new AbstractTypedFunction(
+		builder.addDynamicFunction(name, type, () -> new AbstractTypedFunction(
 			type,
 			new Type[]{type, type}
 		) {
@@ -968,8 +1059,9 @@ public final class ExprFunctions {
 		});
 	}
 
+	/** A function of three float vectors, one answer vector per call site as {@link #addUnaryOpJOML}. */
 	static <T> void addTernaryOpJOML(String name, VectorType.JOMLVector<T> type, QuadConsumer<T, T, T, T> function) {
-		builder.add(name, new AbstractTypedFunction(
+		builder.addDynamicFunction(name, type, () -> new AbstractTypedFunction(
 			type,
 			new Type[]{type, type, type}
 		) {
@@ -993,13 +1085,17 @@ public final class ExprFunctions {
 		});
 	}
 
+	/**
+	 * A test of two float vectors, answering one boolean. It keeps nothing between calls, so one
+	 * instance serves every call site.
+	 */
 	static <T> void addBinaryToBooleanOpJOML(
 		String name,
 		VectorType.JOMLVector<T> type,
 		boolean inverted,
 		ObjectObject2BooleanFunction<T, T> function) {
 		builder.add(name, new AbstractTypedFunction(
-			type,
+			Type.Boolean,
 			new Type[]{type, type}
 		) {
 			@SuppressWarnings("unchecked")
@@ -1011,9 +1107,21 @@ public final class ExprFunctions {
 				params[1].evaluateTo(context, functionReturn);
 				T b = (T) functionReturn.objectReturn;
 
-				functionReturn.objectReturn = function.apply(a, b) != inverted;
+				functionReturn.booleanReturn = function.apply(a, b) != inverted;
 			}
 		});
+	}
+
+	private static boolean sameComponents(Vector2f a, Vector2f b) {
+		return a.x == b.x && a.y == b.y;
+	}
+
+	private static boolean sameComponents(Vector3f a, Vector3f b) {
+		return a.x == b.x && a.y == b.y && a.z == b.z;
+	}
+
+	private static boolean sameComponents(Vector4f a, Vector4f b) {
+		return a.x == b.x && a.y == b.y && a.z == b.z && a.w == b.w;
 	}
 
 	static <T extends TypedFunction> void add(String name, T function) {

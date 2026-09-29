@@ -161,38 +161,66 @@ public enum PbrMap {
 	 * The average of the texels whose class wins the quad, the others left out entirely. Ties go to
 	 * the earliest of the four, which is the rule Iris's own selection ends on
 	 * ({@code pbr/mipmap/DiscreteBlendFunction.java:17-26}).
+	 * <p>
+	 * Four locals and no arrays: this runs three times for every texel of every level of every atlas
+	 * the specular map is reduced for, and at that count two arrays a call are most of what a resource
+	 * reload allocates.
 	 */
 	private static int byClass(IntUnaryOperator classOf, int first, int second, int third,
 			int fourth) {
-		int[] values = {first, second, third, fourth};
-		int[] classes = {classOf.applyAsInt(first), classOf.applyAsInt(second),
-				classOf.applyAsInt(third), classOf.applyAsInt(fourth)};
+		int class0 = classOf.applyAsInt(first);
+		int class1 = classOf.applyAsInt(second);
+		int class2 = classOf.applyAsInt(third);
+		int class3 = classOf.applyAsInt(fourth);
 
-		int winner = classes[0];
-		int best = 0;
-		for (int candidate = 0; candidate < classes.length; candidate++) {
-			int count = 0;
-			for (int against : classes) {
-				if (against == classes[candidate]) {
-					count++;
-				}
-			}
+		// A later candidate has to beat the best so far outright, which is what gives a tie to the
+		// earliest texel.
+		int winner = class0;
+		int best = votes(class0, class0, class1, class2, class3);
+		int votes = votes(class1, class0, class1, class2, class3);
+		if (votes > best) {
+			best = votes;
+			winner = class1;
+		}
 
-			if (count > best) {
-				best = count;
-				winner = classes[candidate];
-			}
+		votes = votes(class2, class0, class1, class2, class3);
+		if (votes > best) {
+			best = votes;
+			winner = class2;
+		}
+
+		if (votes(class3, class0, class1, class2, class3) > best) {
+			winner = class3;
 		}
 
 		int sum = 0;
 		int taken = 0;
-		for (int index = 0; index < values.length; index++) {
-			if (classes[index] == winner) {
-				sum += values[index];
-				taken++;
-			}
+		if (class0 == winner) {
+			sum += first;
+			taken++;
+		}
+
+		if (class1 == winner) {
+			sum += second;
+			taken++;
+		}
+
+		if (class2 == winner) {
+			sum += third;
+			taken++;
+		}
+
+		if (class3 == winner) {
+			sum += fourth;
+			taken++;
 		}
 
 		return sum / taken;
+	}
+
+	/** How many of the four classes are {@code own}, itself included. */
+	private static int votes(int own, int class0, int class1, int class2, int class3) {
+		return (class0 == own ? 1 : 0) + (class1 == own ? 1 : 0) + (class2 == own ? 1 : 0)
+				+ (class3 == own ? 1 : 0);
 	}
 }

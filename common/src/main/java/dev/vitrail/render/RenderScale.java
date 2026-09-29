@@ -527,8 +527,8 @@ public final class RenderScale {
 			return false;
 		}
 
-		int width = Math.max(1, main.width * asked / WHOLE);
-		int height = Math.max(1, main.height * asked / WHOLE);
+		int width = scaled(main.width, asked);
+		int height = scaled(main.height, asked);
 		if (width >= main.width || height >= main.height) {
 			standDown(main);
 
@@ -561,6 +561,15 @@ public final class RenderScale {
 		swapped = true;
 
 		return true;
+	}
+
+	/**
+	 * How many texels one side of the window becomes at a percentage of it: cut by the integer
+	 * division and never under one. A side that is already one texel comes back as one, which is not
+	 * smaller than the window, so {@link #beginWorld} stands down for it.
+	 */
+	static int scaled(int extent, int percent) {
+		return Math.max(1, extent * percent / WHOLE);
 	}
 
 	/**

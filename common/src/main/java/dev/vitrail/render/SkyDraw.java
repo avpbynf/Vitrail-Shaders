@@ -1,7 +1,6 @@
 package dev.vitrail.render;
 
 import dev.vitrail.glsl.PackProgram;
-import dev.vitrail.pack.option.OptionValue;
 import dev.vitrail.pack.model.RenderStage;
 import dev.vitrail.pack.source.OpenedPack;
 import dev.vitrail.pack.target.ChainPlan;
@@ -179,8 +178,6 @@ public final class SkyDraw extends FamilyDraw {
 	private final PackChain owner;
 	private final Path packPath;
 	private final String place;
-	private final Map<String, OptionValue> chosen;
-	private final String profile;
 	private final PackValues values;
 	private final int load;
 	private final ChainPlan plan;
@@ -206,14 +203,11 @@ public final class SkyDraw extends FamilyDraw {
 	/** The program of the pass being recorded, between the moment it is prepared and its bind. */
 	private SkyProgram drawing;
 
-	SkyDraw(PackChain owner, Path packPath, String place, Map<String, OptionValue> chosen,
-			String profile, PackValues values, int load, ChainPlan plan, TargetPlan chainTargets,
-			boolean chainRuns, ColorTargets targets) {
+	SkyDraw(PackChain owner, Path packPath, String place, PackValues values, int load,
+			ChainPlan plan, TargetPlan chainTargets, boolean chainRuns, ColorTargets targets) {
 		this.owner = owner;
 		this.packPath = packPath;
 		this.place = place;
-		this.chosen = Map.copyOf(chosen);
-		this.profile = profile;
 		this.values = values;
 		this.load = load;
 		this.plan = plan;
@@ -240,17 +234,11 @@ public final class SkyDraw extends FamilyDraw {
 
 	/**
 	 * Reads the pack for this family, without compiling. One call is enough; a reading that served
-	 * nothing is still one. The chain asks during its warm-up so shaderc does not land on the first
-	 * draw.
-	 */
-	void prefetch() {
-		prefetch(null);
-	}
-
-	/**
-	 * The same through an opening the caller holds, which is how the load worker reads the six
-	 * families: one opening, one plan of the place and one program tree shared between them,
-	 * where each used to open the archive and rebuild all three for itself.
+	 * nothing is still one.
+	 * <p>
+	 * Through the opening the load worker holds, which is the one road this family is read by: one
+	 * opening, one plan of the place and one program tree shared between the six families, where
+	 * each used to open the archive and rebuild all three for itself.
 	 */
 	@Override
 	void prefetch(OpenedPack shared) {
@@ -289,8 +277,9 @@ public final class SkyDraw extends FamilyDraw {
 	}
 
 	/**
-	 * Everything that has to happen before the sky renderer opens one of its passes: the program
-	 * read, the pipeline compiled, the frame opened and this frame's block written.
+	 * Everything that has to happen before the sky renderer opens one of its passes: the pipeline
+	 * compiled, the frame opened and this frame's block written. The program is the load worker's
+	 * to read, and a sky it has not read is left to the game.
 	 * <p>
 	 * Called with the model view the game has already pushed for this element, which is where the
 	 * sun and the moon are: see {@code ViewSource.passModelView}.
@@ -452,8 +441,8 @@ public final class SkyDraw extends FamilyDraw {
 	}
 
 	/**
-	 * Reads the pack for all eight pieces at once, at the first of them the game draws, and settles
-	 * where every one of them is drawn.
+	 * Reads the pack for all eight pieces at once, on the load worker, and settles where every one of
+	 * them is drawn.
 	 * <p>
 	 * All eight and not the one being asked for. The game reaches four
 	 * of these pieces at moments of its own choosing: the band is skipped until its alpha passes a
@@ -488,9 +477,7 @@ public final class SkyDraw extends FamilyDraw {
 			try {
 				List<PackProgram.SkyElement> asked =
 						ELEMENTS.values().stream().map(Element::asked).toList();
-				Map<String, PackProgram.Loaded> loaded = shared != null
-						? PackProgram.loadSky(shared, this.place, asked)
-						: PackProgram.loadSky(this.packPath, this.place, asked, this.chosen, this.profile);
+				Map<String, PackProgram.Loaded> loaded = PackProgram.loadSky(shared, this.place, asked);
 
 				// Asked once per PROGRAM and not once per piece: four of the eight are drawn with
 				// gbuffers_skybasic and the other four with gbuffers_skytextured, and the plan would
@@ -516,12 +503,27 @@ public final class SkyDraw extends FamilyDraw {
 					byProgram.clear();
 				}
 
-				ELEMENTS.values().stream()
-						.filter(element -> loaded.containsKey(element.element()))
-						.forEach(element -> this.programs.put(element.label(), SkyProgram.of(
-								loaded.get(element.element()), element, this.values, this.load,
-								byProgram.getOrDefault(element.program(), List.of()), this.chainTargets,
-								this.targets, this.chainRuns)));
+				// Built aside and handed over whole, for the rule the class comment gives. A program
+				// can still throw on its way into being, over a uniform whose size nothing here knows,
+				// and a throw out of the middle of this walk would leave the pieces built before it
+				// served and the rest with the game, which is the half of a sky that rule exists to
+				// refuse. Thrown on from here, it takes the whole sky back to the game on the catch
+				// below.
+				Map<String, SkyProgram> built = new LinkedHashMap<>();
+				try {
+					ELEMENTS.values().stream()
+							.filter(element -> loaded.containsKey(element.element()))
+							.forEach(element -> built.put(element.label(), SkyProgram.of(
+									loaded.get(element.element()), element, this.values, this.load,
+									byProgram.getOrDefault(element.program(), List.of()),
+									this.chainTargets, this.targets, this.owner.blocks(), this.chainRuns)));
+				} catch (RuntimeException e) {
+					built.values().forEach(SkyProgram::release);
+
+					throw e;
+				}
+
+				this.programs.putAll(built);
 
 				// Both branches again, and worded for it: a place takes only the half of this list its
 				// own branch reaches, so in the End the four pieces of gbuffers_skybasic can be named
@@ -640,6 +642,11 @@ public final class SkyDraw extends FamilyDraw {
 		}
 
 		return pipeline;
+	}
+
+	@Override
+	String named() {
+		return "the sky";
 	}
 
 	/** The programs once the sky has been read, for the decoded dump. Empty until then. */

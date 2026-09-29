@@ -5,7 +5,6 @@ import dev.vitrail.glsl.LinesVertex;
 import dev.vitrail.glsl.PackProgram;
 import dev.vitrail.glsl.TranslatedUnit;
 import dev.vitrail.glsl.VertexInputs;
-import dev.vitrail.pack.option.OptionValue;
 import dev.vitrail.pack.model.AlphaTest;
 import dev.vitrail.pack.model.ProgramStage;
 import dev.vitrail.pack.model.RenderStage;
@@ -14,9 +13,12 @@ import dev.vitrail.pack.target.ChainPlan;
 import dev.vitrail.pack.model.TargetName;
 import dev.vitrail.pack.target.TargetPlan;
 import dev.vitrail.pack.model.TargetSize;
+import dev.vitrail.render.timing.FrameCensus;
+import dev.vitrail.render.timing.PassTimings;
 import dev.vitrail.Vitrail;
 
 import com.mojang.blaze3d.GpuDeviceLossException;
+import com.mojang.blaze3d.buffers.GpuBufferSlice;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.systems.CommandEncoder;
 import com.mojang.blaze3d.systems.GpuDevice;
@@ -1403,7 +1405,9 @@ public final class EntityDraw extends FamilyDraw {
 	 * layer is cleared to transparent black and composed as though every draw caught in it blended by
 	 * alpha. This pipeline multiplies instead, {@code DST_COLOR} by {@code SRC_COLOR}, so left there
 	 * it multiplies against the clear and every crack comes out black. Served, it multiplies onto the
-	 * colour the chain composed, which is where the game would have put it.
+	 * colour the chain composed, which is where the game would have put it. 26.3 sends the cracks
+	 * over an opaque block to the solid features instead, where this row is not asked, and
+	 * {@code SubmitNodeCollectionCrumblingMixin} sends them back while a pack draws.
 	 * <p>
 	 * <strong>It has no shadow twin here, and that is Iris's map rather than a divergence.</strong>
 	 * Iris holds a shadow key for this pipeline,
@@ -1541,8 +1545,6 @@ public final class EntityDraw extends FamilyDraw {
 	private final PackChain owner;
 	private final Path packPath;
 	private final String place;
-	private final Map<String, OptionValue> chosen;
-	private final String profile;
 	private final PackValues values;
 	private final int load;
 	private final ChainPlan plan;
@@ -1569,8 +1571,11 @@ public final class EntityDraw extends FamilyDraw {
 	 * Volatile so the render thread sees it only after {@link #read} has filled the map. */
 	private volatile boolean read;
 
-	/** The reasons a draw has already been handed back to the game. One line each, not one a frame. */
-	private final Set<String> refused = new LinkedHashSet<>();
+	/**
+	 * The reasons a draw has already been handed back to the game. One line each, not one a frame,
+	 * and nothing composed for a reason already given: {@link Refusals} says what that saves.
+	 */
+	private final Refusals refused = new Refusals();
 
 	/**
 	 * The pipelines whose casters have already been reported dropped, which is the same "once each"
@@ -1586,14 +1591,19 @@ public final class EntityDraw extends FamilyDraw {
 	private EntityProgram drawing;
 	private RenderPipeline bound;
 
-	EntityDraw(PackChain owner, Path packPath, String place, Map<String, OptionValue> chosen,
-			String profile, PackValues values, int load, ChainPlan plan, TargetPlan chainTargets,
-			boolean chainRuns, boolean seeded, ColorTargets targets) {
+	/**
+	 * What the run in progress has told {@link #open}: the pipeline, the scissor and the game's
+	 * transforms. Emptied when a run opens a pass and when it ends, see {@link SentState} for why
+	 * those are the two moments.
+	 */
+	private final SentState sent = new SentState();
+
+	EntityDraw(PackChain owner, Path packPath, String place, PackValues values, int load,
+			ChainPlan plan, TargetPlan chainTargets, boolean chainRuns, boolean seeded,
+			ColorTargets targets) {
 		this.owner = owner;
 		this.packPath = packPath;
 		this.place = place;
-		this.chosen = Map.copyOf(chosen);
-		this.profile = profile;
 		this.values = values;
 		this.load = load;
 		this.plan = plan;
@@ -1633,17 +1643,11 @@ public final class EntityDraw extends FamilyDraw {
 	}
 
 	/**
-	 * Reads the pack for the entities and the hand, without compiling. One call is enough. The chain
-	 * asks during its warm-up so shaderc does not land on the first draw.
-	 */
-	void prefetch() {
-		prefetch(null);
-	}
-
-	/**
-	 * The same through an opening the caller holds, which is how the load worker reads the six
-	 * families: one opening, one plan of the place and one program tree shared between them,
-	 * where each used to open the archive and rebuild all three for itself.
+	 * Reads the pack for the entities and the hand, without compiling. One call is enough.
+	 * <p>
+	 * Through the opening the load worker holds, which is the one road this family is read by: one
+	 * opening, one plan of the place and one program tree shared between the six families, where
+	 * each used to open the archive and rebuild all three for itself.
 	 */
 	@Override
 	void prefetch(OpenedPack shared) {
@@ -1885,7 +1889,15 @@ public final class EntityDraw extends FamilyDraw {
 			// like six of the entity ones, so a key on the target alone would let whichever came first
 			// speak for both and the log would never say the glint went back too. Keying on the piece
 			// instead would say it once per row, which is six lines for the one thing that happened.
+			//
+			// Asked by the same two before anything is composed, the family in the word and the
+			// target as what it is about: the sentence below is six hundred characters that a frame
+			// of mobs would otherwise build for every draw it hands back.
 			String target = GameRender.drawTargetName(prepared);
+			if (!draw.refused.first(element.glint() ? "elsewhere:glint" : "elsewhere:entity",
+					target)) {
+				return false;
+			}
 
 			return draw.refuse(element, "elsewhere:" + (element.glint() ? "glint" : "entity") + ":"
 					+ target, true, "the game sends it to "
@@ -1989,6 +2001,13 @@ public final class EntityDraw extends FamilyDraw {
 			// No pack of the corpus is in that position, measured over its twenty five places. The
 			// line is written for the pack that will be, because this is the one shape of failure
 			// that looks like a decision rather than a fault.
+			//
+			// And it is every draw of that piece for as long as the pack is loaded, so the piece is
+			// asked about before its line is composed, and a draw after the first composes nothing.
+			if (!this.refused.first("missing", element)) {
+				return false;
+			}
+
 			return refuse(element, "missing:" + element.element(), true,
 					"the load left no program for the " + element.element() + " piece");
 		}
@@ -2009,18 +2028,36 @@ public final class EntityDraw extends FamilyDraw {
 						: texture.textureView(),
 				texture == null ? null : texture.sampler());
 
-		GraphicsApi.setPipeline(this.open, this.bound);
-		scissor(prepared.scissorState());
+		// Sent at the first draw of a run and again only where it moved. The pipeline is the run's and
+		// never changes inside it, and the pass holds it, the scissor and the transforms below until
+		// it is told another, so saying one again costs a bind, a command or a descriptor push to
+		// arrive where the pass already stands. keepRedoneWork sends all three at every draw, so that
+		// one jar measures the difference.
+		boolean keep = PassTimings.keepRedoneWork();
+		if (this.sent.pipeline(this.bound) || keep) {
+			GraphicsApi.setPipeline(this.open, this.bound);
+		}
+
+		ScissorState rectangle = prepared.scissorState();
+		if (this.sent.scissor(rectangle.enabled(), rectangle.x(), rectangle.y(), rectangle.width(),
+				rectangle.height()) || keep) {
+			scissor(rectangle);
+		}
+
 		program.bind(this.open);
 
-		// The game's own transforms, for the same reason the image above is set again per draw and
-		// with a sharper one: what a pack reads as gl_TextureMatrix[0] is the matrix its render type
+		// The game's own transforms, for the same reason the image above is asked for at every draw
+		// and with a sharper one: what a pack reads as gl_TextureMatrix[0] is the matrix its render type
 		// was PREPARED with, and two breezes on screen carry two of them inside one run. Bound from
 		// the slice rather than rebuilt, which is what Iris does as well: it declares the same block
 		// (transform/transformer/VanillaTransformer.java:52-57) and registers the game's buffer under
 		// this very name (pipeline/programs/ExtendedShader.java:107).
 		if (program.readsGameTransforms()) {
-			this.open.setUniform(LegacyGlsl.GAME_TRANSFORMS, prepared.dynamicTransforms());
+			GpuBufferSlice transforms = prepared.dynamicTransforms();
+			if (this.sent.transforms(transforms) || keep) {
+				FrameCensus.transformsSet(this.open, LegacyGlsl.GAME_TRANSFORMS, transforms);
+				this.open.setUniform(LegacyGlsl.GAME_TRANSFORMS, transforms);
+			}
 		}
 		this.open.setVertexBuffer(0, info.vertexBuffer().slice());
 		this.open.setIndexBuffer(info.indexBuffer(), info.indexType());
@@ -2042,6 +2079,15 @@ public final class EntityDraw extends FamilyDraw {
 	private boolean begin(GpuDevice device, Element element, EntityProgram program,
 			PreparedRenderType prepared) {
 		end();
+
+		// A program that did not build latches broken in GeometryProgram and never unlatches, and
+		// once its refusal below has been reached nothing after this line can end otherwise: the
+		// frame opened, the targets allocated and the program asked again, on every draw of every
+		// frame, for the same no. Asked of the program's own body, whose latch it is; the pass
+		// above is still closed first, the game drawing this one itself.
+		if (!program.body.servable() && this.refused.reached("prepare", element)) {
+			return false;
+		}
 
 		// NONE OF THESE THREE inside the light's walk, and TerrainDraw skips the same three there.
 		// The walk stands after the chain has closed the frame, so both per frame guards are down
@@ -2085,6 +2131,10 @@ public final class EntityDraw extends FamilyDraw {
 			// The glint is the exception and takes the piece, because its four are ONE name: they are
 			// four compiled modules against four different sets of attachments, so the argument above
 			// runs the other way and one key would hide three failures behind the first.
+			if (!this.refused.first("prepare", element)) {
+				return false;
+			}
+
 			return refuse(element, "prepare:" + (element.glint() ? element.element() : element.program()),
 					true,
 					"the " + element.element() + " program refused to prepare, which it says on its "
@@ -2123,6 +2173,9 @@ public final class EntityDraw extends FamilyDraw {
 				: GeometryHold.open(encoder, descriptor);
 		this.drawing = program;
 		this.bound = pipeline;
+		// Whatever the pass stood on before this run is not this run's to know: a hold hands the same
+		// pass to the next family, and the game's own draws are adopted into it.
+		this.sent.forget();
 
 		return true;
 	}
@@ -2146,7 +2199,9 @@ public final class EntityDraw extends FamilyDraw {
 	 * anything downstream latches, and {@code GeometryProgram} latches broken.
 	 * <p>
 	 * Once per reason and keyed on the reason rather than on the sentence, because the alternative
-	 * is a line a frame at sixty frames a second and the sentences carry the piece's name.
+	 * is a line a frame at sixty frames a second and the sentences carry the piece's name. A caller
+	 * whose key or sentence is composed asks {@link Refusals#first} before it composes either, so a
+	 * reason already given costs a lookup and not two strings.
 	 *
 	 * @param reason  what this is, for the dedup and for nothing else
 	 * @param lasting whether it holds for the whole load rather than for this frame
@@ -2243,13 +2298,14 @@ public final class EntityDraw extends FamilyDraw {
 		this.open = null;
 		this.drawing = null;
 		this.bound = null;
+		this.sent.forget();
 		if (pass != null) {
 			pass.close();
 		}
 	}
 
 	/**
-	 * The scissor the game set for this draw, said again for every draw of a run.
+	 * The scissor the game set for this draw, put on the pass.
 	 * <p>
 	 * Both ways round and not only the enabling one: the state belongs to the draw and the pass
 	 * outlives it, so a rectangle left standing from the draw before would cut whatever comes next
@@ -2275,8 +2331,8 @@ public final class EntityDraw extends FamilyDraw {
 	}
 
 	/**
-	 * Reads the pack for every piece at once, at the first entity or hand the game draws, and settles
-	 * where the outputs of each of them go.
+	 * Reads the pack for every piece at once, on the load worker, and settles where the outputs of
+	 * each of them go.
 	 * <p>
 	 * All of them and not the one being asked for, for the reason the sky reads all six: the moment
 	 * a piece is first drawn is the world's to choose, and some of them wait a long time. Nothing
@@ -2388,9 +2444,7 @@ public final class EntityDraw extends FamilyDraw {
 
 		try {
 			List<PackProgram.GeometryElement> names = asked.stream().map(Element::asked).toList();
-			Map<String, PackProgram.Loaded> loaded = shared != null
-					? PackProgram.loadGeometry(shared, this.place, names)
-					: PackProgram.loadGeometry(this.packPath, this.place, names, this.chosen, this.profile);
+			Map<String, PackProgram.Loaded> loaded = PackProgram.loadGeometry(shared, this.place, names);
 			if (loaded.isEmpty()) {
 				Vitrail.logger().info("{} serves nothing in {} for the entities, the hand or the "
 						+ "glint, so the game keeps its own shader for them",
@@ -2483,12 +2537,12 @@ public final class EntityDraw extends FamilyDraw {
 	 * and the hand's two passes are two groups for exactly that reason, since they really can
 	 * resolve to the same file, {@code gbuffers_hand_water} falling back on {@code gbuffers_hand}.
 	 * <p>
-	 * All of them or none of them, which is what the return in the middle is, and it holds across
-	 * the names of ONE group rather than per name or across groups. These programs write into one
-	 * picture, so a piece whose answer could not be settled would be drawn by the game into it, and
-	 * a chest and the mob beside it would disagree about what lights them. Across groups it does NOT
-	 * hold, for the reason the particles give: they share no target and no pass, so taking one down
-	 * with another would be a choice nothing forced.
+	 * All of them or none of them, which is what the two returns are, and it holds across the names
+	 * of ONE group rather than per name or across groups. These programs write into one picture, so
+	 * a piece whose answer could not be settled would be drawn by the game into it, and a chest and
+	 * the mob beside it would disagree about what lights them. Across groups it does NOT hold, for
+	 * the reason the particles give: they share no target and no pass, so taking one down with
+	 * another would be a choice nothing forced.
 	 */
 	private void keep(List<Element> group, Map<String, PackProgram.Loaded> loaded) {
 		// The side is the pipeline's answer for the entity rows and the row's own flag for the
@@ -2515,13 +2569,35 @@ public final class EntityDraw extends FamilyDraw {
 			byFile.put(half, writes);
 		}
 
-		group.stream()
-				.filter(element -> loaded.containsKey(element.element()))
-				.forEach(element -> this.programs.put(element.element(), EntityProgram.of(
-						loaded.get(element.element()), element, this.values, this.load,
-						byFile.get(new Half(servedBy(loaded.get(element.element())),
-								element.afterStage(), element.shadow())),
-						this.chainTargets, this.targets, this.chainRuns)));
+		// Built aside and handed over whole, which is the same rule carried through the build. A
+		// program can still throw on its way into being, over a uniform whose size nothing here
+		// knows or a pipeline with no colour target to read a blend off, and thrown out of the
+		// middle of this group into the reading's own catch it would leave the pieces built before
+		// it served beside the rest drawn by the game, and every group still to come, the hand,
+		// the glint and the shadow table among them, would never be built at all. Caught here, it
+		// costs this group and no other, which is where the rule draws the line.
+		Map<String, EntityProgram> built = new LinkedHashMap<>();
+		try {
+			for (Element element : group) {
+				PackProgram.Loaded one = loaded.get(element.element());
+				if (one != null) {
+					built.put(element.element(), EntityProgram.of(one, element, this.values,
+							this.load, byFile.get(new Half(servedBy(one), element.afterStage(),
+									element.shadow())),
+							this.chainTargets, this.targets, this.owner.blocks(), this.chainRuns));
+				}
+			}
+		} catch (RuntimeException e) {
+			built.values().forEach(EntityProgram::release);
+			Vitrail.logger().error("Could not build the {} programs of {}, so the game keeps its own "
+					+ "shader for those pieces and the other groups are served as they stand",
+					String.join(", ", group.stream().map(Element::element).toList()),
+					this.packPath.getFileName(), e);
+
+			return;
+		}
+
+		this.programs.putAll(built);
 	}
 
 	/**
@@ -2676,6 +2752,11 @@ public final class EntityDraw extends FamilyDraw {
 	/** The bare name of the file behind a loaded program, which is what the plan is keyed by. */
 	private static String servedBy(PackProgram.Loaded loaded) {
 		return loaded.path().substring(loaded.path().lastIndexOf('/') + 1);
+	}
+
+	@Override
+	String named() {
+		return "the entities and the hand";
 	}
 
 	/** The programs once the entities have been read, for the decoded dump. Empty until then. */

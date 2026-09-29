@@ -30,6 +30,7 @@ import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.ModifyVariable;
+import org.spongepowered.asm.mixin.injection.Slice;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import org.jspecify.annotations.Nullable;
@@ -119,9 +120,24 @@ public abstract class MixinDefaultChunkRenderer {
 
 	/**
 	 * Hands the renderer the pass the pack's program writes, instead of the one it was handed.
+	 * <p>
+	 * <strong>The first use after {@code begin}, and not the first use of the method.</strong> The
+	 * pass has to be replaced past the test for anything to draw and past the compile, which is
+	 * what the class comment asks of this point, and today the first load of the pass is simply
+	 * where that holds. A Sodium that touched the pass any earlier, the metadata accepting any 0.9.x,
+	 * would have moved the replacement in front of both without anything refusing. The slice opens
+	 * at the call to {@code begin}, so the count starts where the requirement does. A Sodium whose
+	 * {@code render} no longer makes that call leaves the slice open from the head of the method,
+	 * which is where the count started before.
 	 */
 	@ModifyVariable(method = "render", require = 1, argsOnly = true,
-			at = @At(value = "LOAD", ordinal = 0))
+			at = @At(value = "LOAD", ordinal = 0),
+			slice = @Slice(from = @At(value = "INVOKE",
+					target = "Lnet/caffeinemc/mods/sodium/client/render/chunk/ShaderChunkRenderer;"
+							+ "begin(Lnet/caffeinemc/mods/sodium/client/render/chunk/terrain/"
+							+ "TerrainRenderPass;Lnet/caffeinemc/mods/sodium/client/util/"
+							+ "FogParameters;Lcom/mojang/renderpearl/api/textures/GpuSampler;"
+							+ "Lnet/minecraft/client/renderer/oit/OitStage;)V")))
 	private RenderPass vitrail$pass(RenderPass pass, ChunkRenderMatrices matrices,
 			ChunkRenderListIterable renderLists, TerrainRenderPass renderPass,
 			CameraTransform camera, FogParameters parameters, boolean indexedRenderingEnabled,

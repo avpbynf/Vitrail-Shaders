@@ -365,7 +365,10 @@ and what is left over still has to land somewhere: the `*` token pours out every
 page names, where it stands, and what the main screen names comes out of it again, because the
 reference builds its leftover list only after its main screen and packs laid their columns against
 that. A pack that writes no root screen key at all is read as a main screen holding exactly that
-token, one page with everything on it rather than an empty one. A name exposed
+token, one page with everything on it rather than an empty one. What the token pours comes in the
+order the pack declares it, which is the order the settings index keeps. That is this engine's
+order and not the reference's, which pours every switch and then every value, each half in
+whatever order a hash table keyed by name leaves them in. A name exposed
 on a screen may be declared nowhere in the pack,
 so the screen has to tolerate an orphan name: neither crash on it nor fabricate a setting for it.
 
@@ -440,6 +443,14 @@ after it is wrong. So the version and every `#extension` are emptied where they 
 taking its version from the header the engine writes, and it is the extensions that are counted, so
 an unexpected one shows up in the totals instead of vanishing.
 
+One thing is still read off the pack's version before it goes: whether it takes the reference's core
+path, which a `core` profile does and so does version 150 or later naming no profile. That decides
+whether a full screen vertex stage reads `vaPosition` as the corner of the quad or is handed a
+constant, and it is read off the live line alone. A version on a branch nobody took is written out
+as it stands, like every other line of that branch, so a pack choosing its version under a
+conditional leaves the other one in the text, and reading every version line would let the last of
+them decide.
+
 ## Textures a pack supplies itself
 
 A pack can declare its own textures under two key families: one naming a texture by name, one
@@ -476,8 +487,10 @@ search table of one. Nothing is tiled and there is no margin, the coordinates be
 declaration gives; the channels are widened to the four the engine allocates, a channel the file has
 not got reading nought and a missing alpha reading one, which is what a texture short of channels
 answers. The file is read to the declared length, like a volume's. A blob declared one-dimensional or as a rectangle is
-not uploaded, the log saying so and the sampler reading one black pixel: those are read through
-samplers this backend does not bind, and no pack at hand declares either.
+not uploaded, the log saying so and the sampler reading one black pixel. A rectangle is read
+through a sampler this backend does not bind; a one-dimensional sampler is bound, but only over an
+image an `image` directive declares, and nothing uploads a line read from a file. No pack at hand
+ships either.
 
 **A three-dimensional volume is flattened onto a two-dimensional atlas**, its declaration rewritten
 under a forged name, and each read replaced by a helper that reads two slices and interpolates.
@@ -539,11 +552,17 @@ This is the frame to keep in mind for everything above. A shader pack is a file 
 **Any path a pack writes is refused if it normalises to somewhere outside `shaders/`.** Without that
 check, a pack can make the engine read an arbitrary file from the user's disk and hand it to a
 shader. That door is not only the include directive: the texture keys go through it too, which is
-why they were routed through the same resolution rather than given their own.
+why they were routed through the same resolution rather than given their own. In a folder pack the
+check also follows the links: a link inside the pack that leads out of it is refused exactly as a
+climb out of it is, and [pack loading](internals/pack-loading.md#resolving-a-path-a-pack-wrote)
+says how.
 
 Path resolution also falls back to a case-insensitive lookup in the parent directory, cached per
 directory, because a folder on a case-insensitive filesystem and a zip do not agree: a pack that
-misspells the case of one of its own files works in one shape and breaks in the other.
+misspells the case of one of its own files works in one shape and breaks in the other. A path that
+names `shaders/` itself is never matched that way.
 
-And every loop whose trip count depends on pack content is bounded on **total work** rather than on
-nesting depth. [Translation](translation.md) covers why that distinction is the one that matters.
+And every loop whose trip count depends on pack content is bounded on **total work**, and depth
+limits stand beside those budgets without replacing them: thirty-two levels of include, sixty-four
+of an expression and a hundred and twenty-eight of a custom uniform, among others.
+[Translation](translation.md) covers why the total is the bound that matters.

@@ -20,8 +20,9 @@ import java.util.Set;
  * which answers what a LINKED program really declares and is the authority wherever the answer
  * decides what is bound. This one answers a question the plan cannot: the plan speaks for one
  * program, and only once that program has been read, while six of the seven geometry families are
- * read at the first draw of their own kind. Anything the engine has to settle before the first
- * frame, for the pack as a whole, has no other source of truth this cheap.
+ * read by the warm-up worker once the chain's composites are compiled, which is after the first
+ * frame. Anything the engine has to settle before the first frame, for the pack as a whole, has no
+ * other source of truth this cheap.
  *
  * <p><strong>Token pasting turns every answer conservative.</strong> A pack that builds a sampler
  * name out of pieces, {@code shadowtex##N}, would never spell it here, and that is the one way this

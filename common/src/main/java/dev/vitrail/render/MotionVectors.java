@@ -1,5 +1,6 @@
 package dev.vitrail.render;
 
+import dev.vitrail.render.timing.FrameCensus;
 import dev.vitrail.uniform.ClipSpace;
 import dev.vitrail.uniform.WorldState;
 import dev.vitrail.Vitrail;
@@ -261,21 +262,12 @@ final class MotionVectors {
 			return;
 		}
 
-		// Composed and inverted here rather than in the shader: it is two multiplies and one inverse
-		// a frame against one of each per pixel, and the shader stays a line of arithmetic anybody
-		// can check against the quoted convention.
-		this.fromScreen.set(view.rendered()).mul(view.gbufferModelView()).invert();
+		compose(view, world.cameraPosition(), world.previousCameraPosition(), this.fromScreen,
+				this.toPreviousClip);
 
-		// Post-multiplied, so the offset reaches a point BEFORE the previous frame's rotation turns
-		// it: both are distances in player space, and one applied on the far side of the rotation
-		// would be a different place in the world. The same order the shadow pair is corrected in.
-		Vector3dc now = world.cameraPosition();
-		Vector3dc before = world.previousCameraPosition();
-		this.toPreviousClip.set(view.previousRendered()).mul(view.gbufferPreviousModelView())
-				.translate((float) (now.x() - before.x()), (float) (now.y() - before.y()),
-						(float) (now.z() - before.z()));
-
+		FrameCensus.rotated();
 		this.block.rotate();
+		FrameCensus.chainBlockWritten();
 		try (GpuBufferSlice.MappedView mapped = this.block.currentBuffer().map(false, true)) {
 			Std140Builder.intoBuffer(mapped.data())
 					.putMat4f(this.fromScreen)
@@ -298,6 +290,29 @@ final class MotionVectors {
 		}
 
 		this.drawn = true;
+	}
+
+	/**
+	 * The two matrices the fragment stage reads, composed on the CPU: from a screen coordinate and a
+	 * device depth to the frame's player space, and from that player space to the previous frame's
+	 * clip space.
+	 *
+	 * @param now    where the camera stands this frame, in the same shifted space as {@code before}
+	 * @param before where it stood the frame before
+	 */
+	static void compose(ViewMatrices view, Vector3dc now, Vector3dc before, Matrix4f fromScreen,
+			Matrix4f toPreviousClip) {
+		// Composed and inverted here rather than in the shader: it is two multiplies and one inverse
+		// a frame against one of each per pixel, and the shader stays a line of arithmetic anybody
+		// can check against the quoted convention.
+		fromScreen.set(view.rendered()).mul(view.gbufferModelView()).invert();
+
+		// Post-multiplied, so the offset reaches a point BEFORE the previous frame's rotation turns
+		// it: both are distances in player space, and one applied on the far side of the rotation
+		// would be a different place in the world. The same order the shadow pair is corrected in.
+		toPreviousClip.set(view.previousRendered()).mul(view.gbufferPreviousModelView())
+				.translate((float) (now.x() - before.x()), (float) (now.y() - before.y()),
+						(float) (now.z() - before.z()));
 	}
 
 	/** Frees the image and the buffer behind the block. */

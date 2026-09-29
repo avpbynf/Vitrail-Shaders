@@ -496,7 +496,9 @@ It is then all eight or none. If any piece the game still draws would stay behin
 keeps the game's target, because the layer is the only road left to a piece that stayed on it and the
 pieces that claim every pixel they span cut the layer where they land. A pack serving a program for
 the basic sky and none for the textured one (which the format allows) would otherwise get a sky
-whose disc marks the whole frame and whose sun and moon are cut out of it.
+whose disc marks the whole frame and whose sun and moon are cut out of it. A program that cannot be
+built at all, over a uniform whose size the engine does not know for instance, sends the whole sky
+back to the game the same way, rather than leaving the pieces built before it on the pack's shader.
 
 All eight and not the branch in hand, which costs one thing worth naming: a place serving one branch
 and not the other holds the served branch back too, though the two are never drawn together. Every

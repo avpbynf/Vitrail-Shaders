@@ -4,13 +4,13 @@ import dev.vitrail.dh.DhLods;
 import dev.vitrail.glsl.DistantVertex;
 import dev.vitrail.glsl.PackProgram;
 import dev.vitrail.glsl.VertexInputs;
-import dev.vitrail.pack.option.OptionValue;
 import dev.vitrail.pack.model.AlphaTest;
 import dev.vitrail.pack.model.RenderStage;
 import dev.vitrail.pack.source.OpenedPack;
 import dev.vitrail.pack.target.ChainPlan;
 import dev.vitrail.pack.target.TargetPlan;
 import dev.vitrail.pack.model.TargetSize;
+import dev.vitrail.render.timing.FrameCensus;
 import dev.vitrail.Vitrail;
 
 import com.mojang.blaze3d.GpuDeviceLossException;
@@ -50,12 +50,10 @@ import java.nio.ByteBuffer;
 import java.nio.file.Path;
 import java.util.Collection;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalDouble;
-import java.util.Set;
 
 /**
  * Draws Distant Horizons' far terrain with the pack's own programs, where DH would have drawn it
@@ -281,8 +279,6 @@ public final class DistantDraw extends FamilyDraw {
 	private final PackChain owner;
 	private final Path packPath;
 	private final String place;
-	private final Map<String, OptionValue> chosen;
-	private final String profile;
 	private final PackValues values;
 	private final int load;
 	private final ChainPlan plan;
@@ -299,8 +295,11 @@ public final class DistantDraw extends FamilyDraw {
 	/** Whether the pack has been read for its far terrain. A reading that served nothing is still one. */
 	private volatile boolean read;
 
-	/** The reasons this engine has already said something about, one line each and not one a frame. */
-	private final Set<String> refused = new LinkedHashSet<>();
+	/**
+	 * The reasons this engine has already said something about, one line each and not one a frame,
+	 * and nothing composed for a reason already given: {@link Refusals} says what that saves.
+	 */
+	private final Refusals refused = new Refusals();
 
 	/** Where the far terrain leaves its depth, in DH's own volume and reversed like the game's. */
 	private GpuTexture depth;
@@ -407,14 +406,11 @@ public final class DistantDraw extends FamilyDraw {
 	 */
 	private boolean shadowBroken;
 
-	DistantDraw(PackChain owner, Path packPath, String place, Map<String, OptionValue> chosen,
-			String profile, PackValues values, int load, ChainPlan plan, TargetPlan chainTargets,
-			boolean chainRuns, ColorTargets targets) {
+	DistantDraw(PackChain owner, Path packPath, String place, PackValues values, int load,
+			ChainPlan plan, TargetPlan chainTargets, boolean chainRuns, ColorTargets targets) {
 		this.owner = owner;
 		this.packPath = packPath;
 		this.place = place;
-		this.chosen = Map.copyOf(chosen);
-		this.profile = profile;
 		this.values = values;
 		this.load = load;
 		this.plan = plan;
@@ -659,9 +655,8 @@ public final class DistantDraw extends FamilyDraw {
 	private void recordShadow(GpuDevice device, Element element, List<DhLods.Section> sections,
 			Vec3 camera) {
 		// Never read from here. The reading opens the pack and expands every include of it, which is
-		// not something to do inside the light's own stage; the camera's own halves read at the
-		// first frame the far terrain is drawn, and a map is only worth filling for a far terrain
-		// something is drawing.
+		// not something to do inside the light's own stage; the load worker reads every half, and a
+		// map is only worth filling for a far terrain something is drawing.
 		DistantProgram program = this.programs.get(element.element());
 		if (program == null || sections.isEmpty()) {
 			return;
@@ -705,7 +700,9 @@ public final class DistantDraw extends FamilyDraw {
 			GraphicsApi.setPipeline(pass, pipeline);
 			program.bind(pass);
 
+			FrameCensus.farPass(true);
 			for (int index = 0; index < sections.size(); index++) {
+				FrameCensus.farSection(true);
 				pass.setUniform(DistantVertex.SECTION_BLOCK,
 						SHADOW_CORNERS.slot(device, base + index));
 
@@ -733,9 +730,14 @@ public final class DistantDraw extends FamilyDraw {
 	 * The half is part of the key and not only of the sentence: the two are refused independently,
 	 * and one line naming the opaque half would otherwise stand for a water half nobody was told
 	 * about.
+	 * <p>
+	 * The half is asked about under the reason's own word before the key is composed, which a map
+	 * refused for good would otherwise build every frame. The picture's refusals ask under some of
+	 * the same words, and the two never meet: the light's halves are rows of their own.
 	 */
 	private void refuseShadow(Element element, String reason, String why) {
-		if (this.refused.add("shadow:" + reason + ":" + element.element())) {
+		if (this.refused.first(reason, element)
+				&& this.refused.add("shadow:" + reason + ":" + element.element())) {
 			Vitrail.logger().warn("The {} half of the far terrain is not drawn into the shadow map "
 					+ "because {}", element.half(), why);
 		}
@@ -781,6 +783,10 @@ public final class DistantDraw extends FamilyDraw {
 
 		RenderPipeline pipeline = program.prepare(device, this.values.world().drawnDistantProjection());
 		if (pipeline == null) {
+			if (!unsaid(element, "prepare", "dropped:prepare")) {
+				return drops(element);
+			}
+
 			return refuse(element, "prepare:" + element.element(), "the " + element.element()
 					+ " program refused to prepare, which it says on its own line above. That is "
 					+ "settled for as long as this pack is loaded, so the far terrain keeps Distant "
@@ -807,6 +813,10 @@ public final class DistantDraw extends FamilyDraw {
 
 		RenderPassDescriptor descriptor = program.descriptor(main.getColorTextureView(), into);
 		if (descriptor == null && !program.plain()) {
+			if (!unsaid(element, "unallocated", "dropped:unallocated")) {
+				return drops(element);
+			}
+
 			return refuse(element, "unallocated:" + element.element(), "one of the pack's colour "
 					+ "targets had no image yet on some frame, so the pass this half wanted could not "
 					+ "be built then. That comes and goes with the frame rather than lasting");
@@ -856,6 +866,10 @@ public final class DistantDraw extends FamilyDraw {
 		// terrain it meets.
 		int base = CORNERS.write(device, sections, minecraft.gameRenderer.mainCamera().position());
 		if (base < 0) {
+			if (!unsaid(element, "sections", "dropped:sections")) {
+				return drops(element);
+			}
+
 			return refuse(element, "sections", "the far terrain grew wider than the block holding its "
 					+ "section corners between the two halves of one frame, and the wider block cannot "
 					+ "replace the one the half already recorded is drawn from. The next frame has it");
@@ -868,7 +882,9 @@ public final class DistantDraw extends FamilyDraw {
 			GraphicsApi.setPipeline(pass, pipeline);
 			program.bind(pass);
 
+			FrameCensus.farPass(false);
 			for (int index = 0; index < sections.size(); index++) {
+				FrameCensus.farSection(false);
 				pass.setUniform(DistantVertex.SECTION_BLOCK, CORNERS.slot(device, base + index));
 
 				for (DhLods.Piece piece : sections.get(index).pieces()) {
@@ -880,7 +896,8 @@ public final class DistantDraw extends FamilyDraw {
 					// Which of the two it names is the whole of what this is here to learn.
 					if (piece.vertices().isClosed() || piece.indices().isClosed()) {
 						String closed = piece.vertices().isClosed() ? "vertex" : "index";
-						if (this.refused.add("closed:" + closed + ":" + element.element())) {
+						if (this.refused.first(closed, element)
+								&& this.refused.add("closed:" + closed + ":" + element.element())) {
 							Vitrail.logger().warn("A piece of the {} half of the far terrain reached "
 									+ "this frame's draw with its {} buffer closed, and is dropped. "
 									+ "Distant Horizons closed it between its own pass and this one",
@@ -1051,17 +1068,11 @@ public final class DistantDraw extends FamilyDraw {
 
 	/**
 	 * Reads the pack for the far terrain, without compiling. One call is enough; a reading that
-	 * served nothing is still one. The chain asks during its warm-up so shaderc does not land on
-	 * the first draw.
-	 */
-	void prefetch() {
-		prefetch(null);
-	}
-
-	/**
-	 * The same through an opening the caller holds, which is how the load worker reads the six
-	 * families: one opening, one plan of the place and one program tree shared between them,
-	 * where each used to open the archive and rebuild all three for itself.
+	 * served nothing is still one.
+	 * <p>
+	 * Through the opening the load worker holds, which is the one road this family is read by: one
+	 * opening, one plan of the place and one program tree shared between the six families, where
+	 * each used to open the archive and rebuild all three for itself.
 	 */
 	@Override
 	void prefetch(OpenedPack shared) {
@@ -1071,7 +1082,7 @@ public final class DistantDraw extends FamilyDraw {
 	}
 
 	/**
-	 * Reads the pack for every half at once, at the first frame the far terrain is drawn.
+	 * Reads the pack for every half at once, on the load worker.
 	 * <p>
 	 * All of them and not the one being asked for, for the reason every other family reads all of
 	 * its pieces: they are one frame apart at most, and a reading is an opening and an expansion of
@@ -1082,9 +1093,7 @@ public final class DistantDraw extends FamilyDraw {
 		try {
 			List<Element> asked = ELEMENTS.values().stream().filter(this::wanted).toList();
 			List<PackProgram.GeometryElement> names = asked.stream().map(Element::asked).toList();
-			PackProgram.Distant distant = shared != null
-					? PackProgram.loadDistant(shared, this.place, names)
-					: PackProgram.loadDistant(this.packPath, this.place, names, this.chosen, this.profile);
+			PackProgram.Distant distant = PackProgram.loadDistant(shared, this.place, names);
 			if (distant.programs().isEmpty()) {
 				Vitrail.logger().info("{} serves nothing in {} for the far terrain, so Distant "
 						+ "Horizons keeps drawing it with its own shader", this.packPath.getFileName(),
@@ -1094,6 +1103,8 @@ public final class DistantDraw extends FamilyDraw {
 			}
 
 			this.carried = distant.carried();
+			boolean pictureUnbuilt = false;
+			boolean shadowUnbuilt = false;
 			for (Element element : asked) {
 				PackProgram.Loaded one = distant.programs().get(element.element());
 				if (one == null) {
@@ -1111,10 +1122,27 @@ public final class DistantDraw extends FamilyDraw {
 				}
 
 				List<ChainPlan.Attachment> writes = writes(element, one);
-				if (writes != null) {
+				if (writes == null) {
+					continue;
+				}
+
+				// Built under a catch of its own, so that a program throwing on its way into being,
+				// over a uniform whose size nothing here knows, is a half missing rather than a loop
+				// left in the middle. Out of the loop it skipped the rule below, and the half built
+				// before it stayed this engine's while the other went back to Distant Horizons,
+				// which is the landscape of two engines that rule exists to refuse. Missing, it is
+				// settled by that rule like a half the pack does not serve.
+				try {
 					this.programs.put(element.element(), DistantProgram.of(one, element, this.carried,
 							this.values, this.load, writes, this.chainTargets, this.targets,
-							this.chainRuns));
+							this.owner.blocks(), this.chainRuns));
+				} catch (RuntimeException e) {
+					shadowUnbuilt |= element.shadow();
+					pictureUnbuilt |= !element.shadow();
+					Vitrail.logger().error("Could not build the {} half of the far terrain of {}, so {}",
+							element.half(), this.packPath.getFileName(), element.shadow()
+									? "it is left out of the shadow map"
+									: "Distant Horizons keeps its own shader for it", e);
 				}
 			}
 
@@ -1127,12 +1155,18 @@ public final class DistantDraw extends FamilyDraw {
 			// And the light's halves go back with them, which is Iris's own shape: every road its
 			// events take is behind shouldOverride, so a far terrain handed back whole is handed back
 			// from the map as well (compat/dh/LodRendererEvents.java:216-227 and :251-259).
+			//
+			// A half that would not build is settled here like one the pack does not serve, and only
+			// the words differ: the catch has already named it, and a dh_shadow that is there and
+			// would not build is not reported as one the pack does not ship.
 			if (served(false) == 1) {
 				Vitrail.logger().info("The far terrain goes back to Distant Horizons whole: the pack "
-						+ "serves one half of it and the two only compose together");
+						+ "{} and the two only compose together", pictureUnbuilt
+								? "could not build one half of it"
+								: "serves one half of it");
 				this.programs.values().forEach(DistantProgram::release);
 				this.programs.clear();
-			} else if (served(true) == 0) {
+			} else if (served(true) == 0 && !shadowUnbuilt) {
 				sayNothingCastsIntoTheMap();
 			}
 		} catch (IOException | RuntimeException e) {
@@ -1243,7 +1277,7 @@ public final class DistantDraw extends FamilyDraw {
 	 *         it back to DH
 	 */
 	private boolean refuse(Element element, String reason, String why) {
-		boolean drop = element.afterDeferred() && this.drew;
+		boolean drop = drops(element);
 		if (this.refused.add((drop ? "dropped:" : "") + reason)) {
 			Vitrail.logger().warn("The {} half of the far terrain {} because {}", element.half(),
 					drop ? "is dropped on such frames, the opaque half being this engine's already"
@@ -1252,6 +1286,26 @@ public final class DistantDraw extends FamilyDraw {
 		}
 
 		return drop;
+	}
+
+	/** Whether {@link #refuse} would drop this half for the frame rather than hand it back. */
+	private boolean drops(Element element) {
+		return element.afterDeferred() && this.drew;
+	}
+
+	/**
+	 * Whether a refusal of this half is still to be composed, asked before it is: a half handed
+	 * back for a lasting reason comes back through here every frame, and composed each time its key
+	 * and its sentence are two strings for a line already said. Under one word for the half handed
+	 * back and another for the half dropped, the drop being part of the key.
+	 */
+	private boolean unsaid(Element element, String kept, String dropped) {
+		return this.refused.first(drops(element) ? dropped : kept, element);
+	}
+
+	@Override
+	String named() {
+		return "Distant Horizons' far terrain";
 	}
 
 	/** The programs once the far terrain has been read, for the decoded dump. Empty until then. */
@@ -1453,6 +1507,7 @@ public final class DistantDraw extends FamilyDraw {
 			}
 
 			int base = this.used;
+			FrameCensus.farBlockWritten();
 			try (GpuBufferSlice.MappedView view = this.buffer.currentBuffer().map(false, true)) {
 				ByteBuffer data = view.data();
 				for (int index = 0; index < sections.size(); index++) {
@@ -1477,13 +1532,14 @@ public final class DistantDraw extends FamilyDraw {
 
 		/** How far apart two slots stand, which is the device's answer and not a number of ours. */
 		private static int slotBytes(GpuDevice device) {
-			return Mth.roundToward(BLOCK_BYTES,
+			return RingLayout.slotBytes(BLOCK_BYTES,
 					device.getDeviceInfo().limits().minUniformOffsetAlignment());
 		}
 
 		void rotate() {
 			this.used = 0;
 			if (this.buffer != null) {
+				FrameCensus.rotated();
 				this.buffer.rotate();
 			}
 		}
@@ -1529,6 +1585,7 @@ public final class DistantDraw extends FamilyDraw {
 						GpuBuffer.USAGE_UNIFORM | GpuBuffer.USAGE_MAP_WRITE, slotBytes(device));
 			}
 
+			FrameCensus.farBlockWritten();
 			try (GpuBufferSlice.MappedView view = this.buffer.currentBuffer().map(false, true)) {
 				Std140Builder.intoBuffer(view.data()).putVec2(pair.x, pair.y);
 			}
@@ -1538,12 +1595,13 @@ public final class DistantDraw extends FamilyDraw {
 
 		/** How wide one slot has to be, which is the device's answer and not a number of ours. */
 		private static int slotBytes(GpuDevice device) {
-			return Mth.roundToward(SEED_BLOCK_BYTES,
+			return RingLayout.slotBytes(SEED_BLOCK_BYTES,
 					device.getDeviceInfo().limits().minUniformOffsetAlignment());
 		}
 
 		void rotate() {
 			if (this.buffer != null) {
+				FrameCensus.rotated();
 				this.buffer.rotate();
 			}
 		}

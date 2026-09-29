@@ -1,0 +1,8 @@
+NEVER: void main() { ofOrderOutputs(); ofPackMain(); discard; }
+LESS: void main() { ofOrderOutputs(); ofPackMain(); if (!(ofFragData0.a < 0.25)) { discard; } }
+EQUAL: void main() { ofOrderOutputs(); ofPackMain(); if (!(ofFragData0.a == 0.25)) { discard; } }
+LEQUAL: void main() { ofOrderOutputs(); ofPackMain(); if (!(ofFragData0.a <= 0.25)) { discard; } }
+GREATER: void main() { ofOrderOutputs(); ofPackMain(); if (!(ofFragData0.a > 0.25)) { discard; } }
+NOTEQUAL: void main() { ofOrderOutputs(); ofPackMain(); if (!(ofFragData0.a != 0.25)) { discard; } }
+GEQUAL: void main() { ofOrderOutputs(); ofPackMain(); if (!(ofFragData0.a >= 0.25)) { discard; } }
+ALWAYS: void main() { ofOrderOutputs(); ofFragData0 = vec4(uv, 0.0, 1.0); }

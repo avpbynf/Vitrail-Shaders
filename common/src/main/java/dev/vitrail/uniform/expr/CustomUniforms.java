@@ -1,6 +1,10 @@
 package dev.vitrail.uniform.expr;
 
 import dev.vitrail.uniform.expr.kroppeb.stareval.element.ExpressionElement;
+import dev.vitrail.uniform.expr.kroppeb.stareval.element.tree.AccessExpressionElement;
+import dev.vitrail.uniform.expr.kroppeb.stareval.element.tree.BinaryExpressionElement;
+import dev.vitrail.uniform.expr.kroppeb.stareval.element.tree.FunctionCall;
+import dev.vitrail.uniform.expr.kroppeb.stareval.element.tree.UnaryExpressionElement;
 import dev.vitrail.uniform.expr.kroppeb.stareval.expression.Expression;
 import dev.vitrail.uniform.expr.kroppeb.stareval.expression.VariableExpression;
 import dev.vitrail.uniform.expr.kroppeb.stareval.function.FunctionContext;
@@ -54,8 +58,8 @@ import java.util.Set;
  * Three rules decide what happens when a pack gets it wrong, and all three exist so that a
  * mistake stays named instead of turning into a permanently wrong image:
  * <ul>
- *     <li>a declaration that does not parse, or that reads a name nothing answers, is dropped and
- *     named. It is never evaluated as zero;</li>
+ *     <li>a declaration that does not parse, that nests deeper than {@link #MAX_DEPTH}, or that
+ *     reads a name nothing answers, is dropped and named. It is never evaluated as zero;</li>
  *     <li>everything that depended on it is dropped and named with it, rather than reading zero
  *     from the middle of the graph;</li>
  *     <li>a declaration that shadows a name the engine already answers is refused, so that a pack
@@ -76,6 +80,30 @@ public final class CustomUniforms implements FunctionContext, FrameClock {
 			"vec2", VectorType.VEC2,
 			"vec3", VectorType.VEC3,
 			"vec4", VectorType.VEC4);
+
+	/**
+	 * How far a declaration may nest before it is refused rather than read. The parser keeps a
+	 * stack of its own, but the resolver and the evaluator both walk the tree by recursion, and a
+	 * pack is downloaded content read while the game runs: a {@code StackOverflowError} is an
+	 * {@code Error}, so it walks straight through the {@code catch (Exception)} around each
+	 * declaration here and the {@code catch (IOException | RuntimeException)} of
+	 * {@code render/PackChoice}, and the game ends in a crash over one line of the properties.
+	 * Refused, it costs that one uniform, named.
+	 * <p>
+	 * Deep enough for anything real: the deepest declaration of BSL, Bliss, Photon and either
+	 * Complementary nests nine levels, BSL's {@code shadowFade}. Shallow enough to leave the stack
+	 * alone: the shape that spends the most of it per level, a chain of integer sums, overflowed a
+	 * test thread at some thirteen hundred.
+	 * <p>
+	 * Iris has no limit. Its resolver recurses the same way
+	 * ({@code kroppeb/stareval/resolver/ExpressionResolver.java:176}) and catches only
+	 * {@code Exception} around the parse and the resolve
+	 * ({@code uniforms/custom/CustomUniforms.java:324}, {@code :69}), so the same line throws the
+	 * same {@code Error} there. Nothing is tuned against an overflow. What the limit costs the
+	 * image is a declaration between 129 levels and wherever the stack gives out, which the
+	 * reference reads and this drops, named: none among the packs above comes near it.
+	 */
+	static final int MAX_DEPTH = 128;
 
 	private final Map<String, Input> engineInputs = new LinkedHashMap<>();
 	private final Map<String, Derived> declared = new LinkedHashMap<>();
@@ -274,6 +302,47 @@ public final class CustomUniforms implements FunctionContext, FrameClock {
 	private record Declaration(String name, Type type, ExpressionElement tree, boolean exposed) {
 	}
 
+	/**
+	 * Whether the tree nests deeper than {@link #MAX_DEPTH}. Walked with a stack of its own, since
+	 * walking it by recursion would be the very overflow the limit is there to prevent, and given
+	 * up on as soon as one branch is too deep. A name or a number is one level, and every call,
+	 * operator and accessor above it one more.
+	 */
+	private static boolean nestsTooDeep(ExpressionElement tree) {
+		Deque<Level> pending = new ArrayDeque<>();
+		pending.push(new Level(tree, 1));
+
+		while (!pending.isEmpty()) {
+			Level level = pending.pop();
+			if (level.depth() > MAX_DEPTH) {
+				return true;
+			}
+
+			int below = level.depth() + 1;
+			switch (level.element()) {
+				case UnaryExpressionElement unary -> pending.push(new Level(unary.inner(), below));
+				case BinaryExpressionElement binary -> {
+					pending.push(new Level(binary.left(), below));
+					pending.push(new Level(binary.right(), below));
+				}
+				case FunctionCall call -> {
+					for (ExpressionElement argument : call.args()) {
+						pending.push(new Level(argument, below));
+					}
+				}
+				case AccessExpressionElement access -> pending.push(new Level(access.base(), below));
+				default -> {
+					// A name or a number, which nests nothing.
+				}
+			}
+		}
+
+		return false;
+	}
+
+	private record Level(ExpressionElement element, int depth) {
+	}
+
 	private static final class BuilderImpl implements Builder {
 
 		private final Map<String, Declaration> declarations = new LinkedHashMap<>();
@@ -299,6 +368,12 @@ public final class CustomUniforms implements FunctionContext, FrameClock {
 				tree = Parser.parse(expression, ExprGrammar.options);
 			} catch (Exception e) {
 				this.refused.add(name + ": " + reason(e) + " (= " + expression + ")");
+				return this;
+			}
+
+			if (nestsTooDeep(tree)) {
+				this.refused.add(name + ": nests more than " + MAX_DEPTH + " levels deep, which is"
+						+ " refused rather than read");
 				return this;
 			}
 

@@ -1,0 +1,75 @@
+--- volume-flattened.fsh (FRAGMENT) ---
+#version 460 core
+#define <engine defines>
+uniform sampler2D ofPackTexture_colortex6;
+uniform sampler3D colortex7;
+uniform sampler2D colortex0;
+vec4 ofTexture3D_colortex6(sampler2D ofMap, vec3 ofAt) {
+	vec3 ofQ = fract(ofAt);
+	float ofZ = ofQ.z * 32.0 - 0.5;
+	float ofBase = floor(ofZ);
+	vec2 ofIn = ofQ.xy * vec2(32.0, 32.0) + 1.0;
+	int ofNear = int(mod(ofBase, 32.0));
+	int ofFar = int(mod(ofBase + 1.0, 32.0));
+	vec2 ofTile = vec2(34.0, 34.0);
+	vec2 ofSize = vec2(204.0, 204.0);
+	vec2 ofA = (vec2(ofNear % 6, ofNear / 6) * ofTile + ofIn) / ofSize;
+	vec2 ofB = (vec2(ofFar % 6, ofFar / 6) * ofTile + ofIn) / ofSize;
+	return mix(texture(ofMap, ofA), texture(ofMap, ofB), clamp(ofZ - ofBase, 0.0, 1.0));
+}
+vec4 ofTexture3D_colortex6(sampler2D ofMap, vec3 ofAt, float ofLevel) {
+	return ofTexture3D_colortex6(ofMap, ofAt);
+}
+layout(location = 0) out vec4 ofFragData0;
+void ofOrderOutputs() { ofFragData0; }
+
+
+
+
+
+#define NOISE_LUT colortex6
+in vec2 texcoord;
+
+void main() { ofOrderOutputs();
+	vec3 uvw = vec3(texcoord, 0.25);
+	float a = ofTexture3D_colortex6(ofPackTexture_colortex6, uvw).r;
+	float b = ofTexture3D_colortex6(ofPackTexture_colortex6, uvw, 0.0).g;
+	float c = textureLod(colortex7, uvw, 0.0).b;
+	ofFragData0 = vec4(a, b, c, textureLod(colortex0, texcoord, 0.0).a);
+}
+--- notes ---
+fragmentOutputs = 1
+dynamicFragData = 0
+uniformConflicts = 0
+shadowCalls = 0
+unwrappedShadow = 0
+strippedExtensions = 0
+depthEpilogue = 0
+alphaEpilogue = 0
+coverage = 0
+depthLookups = 0
+parameterLookups = 0
+pinnedLookups = 2
+unpinnedParameterLookups = 0
+fragCoordZ = 0
+fragCoordXyz = 0
+fragCoordUnhandled = 0
+fragDepthWrites = 0
+fragDepthUnhandled = 0
+conflictNames = []
+comparedSamplers = []
+hardwareCompared = []
+retypedSamplers = []
+storageBlocks = []
+volumeLookups = 2
+volumesLeftAlone = 0
+trigCalls = 0
+gameTextureMatrix = 0
+gameModelView = 0
+--- drawBuffers ---
+[]
+--- block ---
+--- samplers ---
+sampler2D ofPackTexture_colortex6
+sampler3D colortex7
+sampler2D colortex0

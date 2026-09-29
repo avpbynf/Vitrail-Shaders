@@ -65,6 +65,12 @@ public final class PackValues {
 
 	private final FrameState state = new FrameState();
 
+	/**
+	 * How many times the frame has moved on, for whoever has to know whether what it read out of the
+	 * state is still what the state says. See {@link #version}.
+	 */
+	private long version;
+
 	/** Everything the pack declared, live or not, which is what tells a gap from a mistake. */
 	private final Set<String> declared = new LinkedHashSet<>();
 
@@ -656,6 +662,7 @@ public final class PackValues {
 	 * smoothed value in the pack fade at twice the speed with nothing on screen to say so.
 	 */
 	public void advance() {
+		this.version++;
 		this.state.advance();
 		this.customs.update(this.state, this.state.frameTime());
 
@@ -667,7 +674,26 @@ public final class PackValues {
 
 	/** Drops what a client that has left a world was still holding, see {@link FrameState#leaveWorld}. */
 	public void leaveWorld() {
+		this.version++;
 		this.state.leaveWorld();
+	}
+
+	/**
+	 * A number that differs between any two moments the frame's values differ at, and is the same
+	 * between any two they do not.
+	 * <p>
+	 * Everything a block is written from is either set by the pass that writes it, through the six
+	 * setters above, or held by the state and moved, once the pack is loaded, by {@link #advance} and
+	 * {@link #leaveWorld} and by nothing else: the state has no other owner and no other writer.
+	 * This counts those two, so a block written twice at one version has read the same frame twice,
+	 * and what the writer set beside it is the only thing left that can have moved. The custom
+	 * uniforms are evaluated inside {@link #advance}, so they are behind it too.
+	 * <p>
+	 * It says nothing about time: a frame that is never advanced is the same frame for as long as it
+	 * stands, whatever the clock says.
+	 */
+	public long version() {
+		return this.version;
 	}
 
 	/** One line per declaration the pack lost, and what the pack has left. Said once per load. */

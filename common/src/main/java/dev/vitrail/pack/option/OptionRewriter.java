@@ -25,6 +25,10 @@ public final class OptionRewriter {
 	/** The one constant type a switch can be given, out of the four the pattern above accepts. */
 	private static final String BOOL = "bool";
 
+	/** The keyword each pattern opens on, which a line has to spell whole to match it. */
+	private static final String DEFINE_WORD = "define";
+	private static final String CONST_WORD = "const";
+
 	private OptionRewriter() {
 	}
 
@@ -54,8 +58,8 @@ public final class OptionRewriter {
 	 * @param scale a percentage on each axis, a hundred meaning the declaration is untouched
 	 */
 	public static String apply(String line, Map<String, OptionValue> chosen, int scale) {
-		Matcher define = DEFINE.matcher(line);
-		if (define.matches()) {
+		Matcher define = match(DEFINE, DEFINE_WORD, line);
+		if (define != null) {
 			OptionValue value = chosen.get(define.group(3));
 			if (value == null) {
 				return line;
@@ -75,8 +79,8 @@ public final class OptionRewriter {
 			return indent + (value.asBoolean() ? "#define " : "//#define ") + name + tail;
 		}
 
-		Matcher constant = CONSTANT.matcher(line);
-		if (constant.matches()) {
+		Matcher constant = match(CONSTANT, CONST_WORD, line);
+		if (constant != null) {
 			// A constant off the closed list is never a setting. A chosen value for one can
 			// still arrive, from a hand-written line of the pack's settings file, and it has to
 			// change nothing: the reference does not hold such a name as an option, so a shared
@@ -129,6 +133,23 @@ public final class OptionRewriter {
 		}
 
 		return line;
+	}
+
+	/**
+	 * The matcher of a line the pattern matches whole, or null. This runs on every line of every unit
+	 * a pack expands, and almost none of them declare anything: a line that does not spell the
+	 * keyword its pattern opens on cannot match it, and looking for a word is cheaper than setting a
+	 * matcher up. The word is necessary and never sufficient, so a line that holds it still goes to
+	 * the pattern, which alone says whether the line declares.
+	 */
+	private static Matcher match(Pattern pattern, String word, String line) {
+		if (!line.contains(word)) {
+			return null;
+		}
+
+		Matcher matcher = pattern.matcher(line);
+
+		return matcher.matches() ? matcher : null;
 	}
 
 	/**

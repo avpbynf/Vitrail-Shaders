@@ -64,7 +64,7 @@ final class CloudProgram extends FamilyProgram {
 	 */
 	static CloudProgram of(PackProgram.Loaded loaded, boolean fancy, PackValues values, int load,
 			List<ChainPlan.Attachment> writes, TargetPlan chainTargets, ColorTargets targets,
-			boolean chainRuns) {
+			BlockRing blocks, boolean chainRuns) {
 		// Bound again against the chain's own plan, for the reason the terrain and the sky are: what
 		// the load bound them against is a plan without the user's pass filter.
 		//
@@ -103,7 +103,7 @@ final class CloudProgram extends FamilyProgram {
 				// No format, which this family is alone in and GeometryProgram takes as "bind no
 				// vertex buffer". Handing DefaultVertexFormat.POSITION here instead would declare an
 				// input the pass never sets and read whatever the last draw left bound.
-				null, writes, targets, chainRuns));
+				null, writes, targets, blocks, chainRuns));
 	}
 
 	/**

@@ -25,15 +25,33 @@ public final class Macros {
 	/** A symbol may be defined in terms of another. Four levels is more than the corpus uses. */
 	private static final int MAX_ROUNDS = 4;
 
+	/**
+	 * How long a line may grow while its symbols are substituted, where it did not come in longer.
+	 * <p>
+	 * The rounds bound how deep a symbol may lead and not how wide: a symbol written as a thousand
+	 * others, each of those as a thousand more, turns a line of one name into two gigabytes by the
+	 * third round, which is an {@code OutOfMemoryError} while the client is still starting. The
+	 * longest line of the three packs measured is thirty kilobytes, in Eclipse's
+	 * {@code block.properties}, and substituting does not lengthen it; this is eight times that.
+	 */
+	private static final int MAX_CHARACTERS = 256 * 1024;
+
 	private Macros() {
 	}
 
+	/**
+	 * The text with the symbols substituted, as far as the rounds go. A round that would grow the
+	 * line past {@link #MAX_CHARACTERS} is abandoned and the line is handed back as the round
+	 * before left it, names and all, for the reason a symbol with no value is left alone: the reader
+	 * then says which name it could not read.
+	 */
 	public static String expand(String text, Map<String, String> defines) {
+		int most = Math.max(MAX_CHARACTERS, text.length());
 		String current = text;
 
 		for (int round = 0; round < MAX_ROUNDS; round++) {
-			String next = expandOnce(current, defines);
-			if (next.equals(current)) {
+			String next = expandOnce(current, defines, most);
+			if (next == null || next.equals(current)) {
 				return current;
 			}
 
@@ -43,7 +61,8 @@ public final class Macros {
 		return current;
 	}
 
-	private static String expandOnce(String text, Map<String, String> defines) {
+	/** One round, or null as soon as the line it builds is longer than {@code most}. */
+	private static String expandOnce(String text, Map<String, String> defines, int most) {
 		Matcher identifier = IDENTIFIER.matcher(text);
 		StringBuilder out = new StringBuilder();
 
@@ -54,11 +73,14 @@ public final class Macros {
 					&& !component(text, identifier.start());
 
 			identifier.appendReplacement(out, Matcher.quoteReplacement(substitute ? value : name));
+			if (out.length() > most) {
+				return null;
+			}
 		}
 
 		identifier.appendTail(out);
 
-		return out.toString();
+		return out.length() > most ? null : out.toString();
 	}
 
 	/**

@@ -1,6 +1,8 @@
 package dev.vitrail.pack.option;
 
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -37,7 +39,7 @@ public final class OptionIndex {
 	// as in "// render resolution multiplier [0.10 0.25]", and requiring the bracket first
 	// silently leaves those options with nothing to cycle through.
 	private static final Pattern VALUE_LIST = Pattern.compile("//[^\\[]*\\[(.*?)]");
-	private static final Pattern TRAILING_COMMENT = Pattern.compile("//.*");
+	private static final Pattern WHITESPACE = Pattern.compile("\\s+");
 	// The reference's own strictness, detail for detail: no space between # and the keyword,
 	// the name alone, and nothing after it, so a trailing comment on the #ifdef line keeps it
 	// from counting as a reference there too. The name class is the one this index can hold;
@@ -45,11 +47,25 @@ public final class OptionIndex {
 	private static final Pattern CONDITIONAL =
 			Pattern.compile("^\\s*#(?:ifdef|ifndef)\\s+([A-Za-z_]\\w*)\\s*$");
 
+	// Each pattern above needs a word spelled out whole on a line it matches: a define its keyword,
+	// a constant its keyword, a conditional the # and if of either directive, since the reference
+	// allows no space between them. Most lines of a shader spell none of them, and looking for a
+	// word costs a fraction of setting a matcher up. The words are necessary and never sufficient:
+	// a line that holds one still goes to its pattern, which alone says whether it declares.
+	private static final String DEFINE_WORD = "define";
+	private static final String CONST_WORD = "const";
+	private static final String CONDITIONAL_WORD = "#if";
+
 	private final Map<String, PackOption> byName;
 	private final Set<String> conditionalReferences;
 
 	private OptionIndex(Map<String, PackOption> byName, Set<String> conditionalReferences) {
-		this.byName = Map.copyOf(byName);
+		// Copied in the order the reader met them rather than through Map.copyOf, whose iteration
+		// order is salted afresh in every process. The settings are walked in that order, by the *
+		// of a page and by a pack that lays out no page at all, and through Map.copyOf the same pack
+		// listed them differently at every start of the game. The names a conditional tests are only
+		// ever asked about one at a time, so that set can stay what it is.
+		this.byName = Collections.unmodifiableMap(new LinkedHashMap<>(byName));
 		this.conditionalReferences = Set.copyOf(conditionalReferences);
 	}
 
@@ -66,14 +82,17 @@ public final class OptionIndex {
 		/** Reads one file's lines, {@code where} being the name a declaration is reported under. */
 		public void read(String where, List<String> lines) {
 			for (int i = 0; i < lines.size(); i++) {
-				PackOption option = parse(lines.get(i), where, i + 1);
+				String line = lines.get(i);
+				PackOption option = parse(line, where, i + 1);
 				if (option != null) {
 					this.found.putIfAbsent(option.name(), option);
 				}
 
-				Matcher conditional = CONDITIONAL.matcher(lines.get(i));
-				if (conditional.matches()) {
-					this.referenced.add(conditional.group(1));
+				if (line.contains(CONDITIONAL_WORD)) {
+					Matcher conditional = CONDITIONAL.matcher(line);
+					if (conditional.matches()) {
+						this.referenced.add(conditional.group(1));
+					}
 				}
 			}
 		}
@@ -84,22 +103,29 @@ public final class OptionIndex {
 	}
 
 	private static PackOption parse(String line, String where, int lineNumber) {
-		Matcher define = DEFINE.matcher(line);
-		if (define.matches()) {
-			String rest = define.group(3);
-			String defaultText = TRAILING_COMMENT.matcher(rest).replaceAll("").trim();
+		if (line.contains(DEFINE_WORD)) {
+			Matcher define = DEFINE.matcher(line);
+			if (define.matches()) {
+				String rest = define.group(3);
+				// Cut at the first pair of slashes. The pattern's dot takes no line terminator, so the
+				// rest holds none and a comment can only run to the end of it.
+				int comment = rest.indexOf("//");
+				String defaultText = (comment < 0 ? rest : rest.substring(0, comment)).trim();
 
-			// Empty means a bare switch. Anything else is a value, even without a list of
-			// allowed ones next to it, and even when it is a macro's parameter list.
-			return new PackOption(define.group(2),
-					defaultText.isEmpty() ? PackOption.Kind.TOGGLE : PackOption.Kind.VALUE,
-					defaultText, valueList(rest), define.group(1) != null, null, where, lineNumber);
+				// Empty means a bare switch. Anything else is a value, even without a list of
+				// allowed ones next to it, and even when it is a macro's parameter list.
+				return new PackOption(define.group(2),
+						defaultText.isEmpty() ? PackOption.Kind.TOGGLE : PackOption.Kind.VALUE,
+						defaultText, valueList(rest), define.group(1) != null, null, where, lineNumber);
+			}
 		}
 
-		Matcher constant = CONSTANT.matcher(line);
-		if (constant.matches()) {
-			return new PackOption(constant.group(2), PackOption.Kind.CONST, constant.group(3).trim(),
-					valueList(constant.group(4)), false, constant.group(1), where, lineNumber);
+		if (line.contains(CONST_WORD)) {
+			Matcher constant = CONSTANT.matcher(line);
+			if (constant.matches()) {
+				return new PackOption(constant.group(2), PackOption.Kind.CONST, constant.group(3).trim(),
+						valueList(constant.group(4)), false, constant.group(1), where, lineNumber);
+			}
 		}
 
 		return null;
@@ -107,12 +133,25 @@ public final class OptionIndex {
 
 	/** The allowed values a pack offers in a trailing {@code //[a b c]} comment. */
 	private static List<String> valueList(String text) {
+		// The list is found by the slashes in front of it, so a text without a pair has none.
+		if (!text.contains("//")) {
+			return List.of();
+		}
+
 		Matcher list = VALUE_LIST.matcher(text);
 		if (!list.find()) {
 			return List.of();
 		}
 
-		return List.of(list.group(1).trim().split("\\s+", -1)).stream().filter(token -> !token.isEmpty()).toList();
+		String[] words = WHITESPACE.split(list.group(1).trim(), -1);
+		List<String> values = new ArrayList<>(words.length);
+		for (String word : words) {
+			if (!word.isEmpty()) {
+				values.add(word);
+			}
+		}
+
+		return values;
 	}
 
 	public Optional<PackOption> get(String name) {
@@ -151,11 +190,20 @@ public final class OptionIndex {
 		};
 	}
 
+	/**
+	 * Every declaration, in the order the pack declares them: file after file in the order
+	 * {@link dev.vitrail.pack.source.ShaderPackSource#sourceFiles()} walks them, line after line
+	 * within a file, and a name declared twice where it was declared first. That is the order the
+	 * {@code *} of a settings page pours them out in, so it is the order a player reads.
+	 */
 	public Collection<PackOption> all() {
 		return this.byName.values();
 	}
 
-	/** Every name the pack declares, for a caller that only has to tell declared from not. */
+	/**
+	 * Every name the pack declares, in the order of {@link #all()}, for a caller that only has to
+	 * tell declared from not.
+	 */
 	public Set<String> names() {
 		return this.byName.keySet();
 	}

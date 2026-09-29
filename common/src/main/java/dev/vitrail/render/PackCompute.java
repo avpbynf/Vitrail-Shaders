@@ -19,6 +19,7 @@ import dev.vitrail.pack.texture.CustomImages;
 import dev.vitrail.render.storage.GpuRecording;
 import dev.vitrail.render.storage.StorageBuffers;
 import dev.vitrail.render.storage.StorageImages;
+import dev.vitrail.render.timing.FrameCensus;
 import dev.vitrail.uniform.ClipSpace;
 import dev.vitrail.uniform.UniformCatalog;
 import dev.vitrail.Vitrail;
@@ -806,6 +807,7 @@ final class PackCompute implements AutoCloseable {
 			}
 
 			if (this.block != null) {
+				FrameCensus.rotated();
 				this.block.rotate();
 			}
 		}
@@ -1102,6 +1104,7 @@ final class PackCompute implements AutoCloseable {
 						GpuBuffer.USAGE_UNIFORM | GpuBuffer.USAGE_MAP_WRITE, bytes);
 			}
 
+			FrameCensus.chainBlockWritten();
 			try (GpuBufferSlice.MappedView view = this.block.currentBuffer().map(false, true)) {
 				ByteBuffer data = view.data();
 				data.position(0);

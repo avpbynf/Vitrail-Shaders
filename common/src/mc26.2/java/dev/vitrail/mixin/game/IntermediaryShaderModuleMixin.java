@@ -41,11 +41,12 @@ public abstract class IntermediaryShaderModuleMixin {
 		ComputeShader.appendStorageBuffers(callback.getReturnValue());
 	}
 
+	/** The same reading as {@code GlslCompilerMixin}'s: a one or three dimensional image as two. */
 	@WrapOperation(method = "rebind", require = 1,
 			at = @At(value = "INVOKE",
 					target = "Lcom/mojang/blaze3d/vulkan/glsl/SpvSampler;dimensions()I"))
-	private int vitrail$allow3d(@Coerce Object sampler, Operation<Integer> original) {
+	private int vitrail$allowLineAndVolume(@Coerce Object sampler, Operation<Integer> original) {
 		int dimension = original.call(sampler);
-		return dimension == 2 ? 1 : dimension;
+		return (dimension == 0 || dimension == 2) ? 1 : dimension;
 	}
 }

@@ -1,0 +1,58 @@
+--- shadow-chain-both.fsh (FRAGMENT) ---
+#version 460 core
+#define <engine defines>
+uniform sampler2DShadow shadowtex0;
+uniform sampler2D shadowtex1;
+uniform sampler2D shadow;
+layout(location = 0) out vec4 ofFragData0;
+void ofOrderOutputs() { ofFragData0; }
+
+
+
+
+
+in vec3 pos;
+
+void main() { ofOrderOutputs();
+	float s = textureLod(shadowtex0, pos, 3.0);
+	s += textureLod(shadowtex1, pos.xy, 2.0).r;
+	s += textureLodOffset(shadow, pos.xy, 1.0, ivec2(1, 1)).r;
+	s += textureLod(shadowtex1, pos.xy, 0.0).r;
+	ofFragData0 = vec4(s);
+}
+--- notes ---
+fragmentOutputs = 1
+dynamicFragData = 0
+uniformConflicts = 0
+shadowCalls = 0
+unwrappedShadow = 0
+strippedExtensions = 0
+depthEpilogue = 0
+alphaEpilogue = 0
+coverage = 0
+depthLookups = 0
+parameterLookups = 0
+pinnedLookups = 1
+unpinnedParameterLookups = 0
+fragCoordZ = 0
+fragCoordXyz = 0
+fragCoordUnhandled = 0
+fragDepthWrites = 0
+fragDepthUnhandled = 0
+conflictNames = []
+comparedSamplers = [shadowtex0]
+hardwareCompared = [shadowtex0]
+retypedSamplers = []
+storageBlocks = []
+volumeLookups = 0
+volumesLeftAlone = 0
+trigCalls = 0
+gameTextureMatrix = 0
+gameModelView = 0
+--- drawBuffers ---
+[]
+--- block ---
+--- samplers ---
+sampler2DShadow shadowtex0
+sampler2D shadowtex1
+sampler2D shadow

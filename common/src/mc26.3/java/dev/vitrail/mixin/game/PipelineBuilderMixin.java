@@ -17,8 +17,8 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Lets the pipeline builder of 26.3 accept the two things a pack declares that the game's own
- * shaders never do: storage resources and three dimensional images.
+ * Lets the pipeline builder of 26.3 accept the things a pack declares that the game's own shaders
+ * never do: storage resources, and one and three dimensional images.
  * <p>
  * The builder checks every descriptor a stage reflects against the bind group the pipeline
  * declares, by name and by kind, and it knows three kinds, a uniform buffer, a sampled image and a
@@ -26,9 +26,9 @@ import java.util.Map;
  * and its storage image as a sampled image, exactly as on 26.2, and it is the layout of the
  * pipeline and the descriptor pushed at the draw where each becomes what it is
  * ({@code VulkanRenderPipelineMixin}, {@code VulkanRenderPassMixin}). So here each is read as the
- * kind it is declared as, which is all the check asks. A three dimensional image is read as two
- * dimensional for the same reason 26.2 did it: the refusal is the facade's, the view bound is the
- * three dimensional one the engine allocated, and Vulkan draws with it.
+ * kind it is declared as, which is all the check asks. A one or three dimensional image is read as
+ * two dimensional for the same reason 26.2 did it: the refusal is the facade's, the view bound is
+ * the one or three dimensional one the engine allocated, and Vulkan draws with it.
  */
 @Mixin(PipelineBuilder.class)
 public abstract class PipelineBuilderMixin {
@@ -51,14 +51,19 @@ public abstract class PipelineBuilderMixin {
 		return kind;
 	}
 
-	/** SpvDim3D is 2, and SpvDim2D, which the check accepts for a sampled image, is 1. */
+	/**
+	 * SpvDim1D is 0 and SpvDim3D is 2, and SpvDim2D, which the check accepts for a sampled image,
+	 * is 1. Bliss and the packs built on it keep a line of block data as a one dimensional image
+	 * ({@code image.imgBlockData}, read as {@code usampler1D}), and without this every program
+	 * reading it, their composite1 among them, is refused and the whole pack with it.
+	 */
 	@WrapOperation(method = "generateBackendCreateInfo", require = 2,
 			at = @At(value = "INVOKE",
 					target = "Lcom/mojang/renderpearl/backend/api/SpvModule$Reflection$Type;"
 							+ "dimensions()I"))
-	private int vitrail$allow3d(SpvModule.Reflection.Type type, Operation<Integer> original) {
+	private int vitrail$allowLineAndVolume(SpvModule.Reflection.Type type, Operation<Integer> original) {
 		int dimensions = original.call(type);
-		return dimensions == 2 ? 1 : dimensions;
+		return (dimensions == 0 || dimensions == 2) ? 1 : dimensions;
 	}
 
 	/**

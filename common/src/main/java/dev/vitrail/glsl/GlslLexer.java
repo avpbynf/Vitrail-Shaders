@@ -48,21 +48,28 @@ public final class GlslLexer {
 	/**
 	 * One token of the source, with the preprocessor line it sits on.
 	 *
-	 * @param directive the preprocessor keyword of the line this token sits on, {@code null} when
-	 *                  the token is ordinary code. A {@code #} on its own gives an empty string.
-	 * @param macroName whether this token is the name a naming directive gives rather than a use of
-	 *                  one, which is what keeps it from being renamed. It rides on the token and not
-	 *                  on its position because the translator inserts tokens, and an insertion moves
-	 *                  every index after it: a position recorded before one names somebody else's
-	 *                  token afterwards, and nothing on the way out says so
+	 * @param directive      the preprocessor keyword of the line this token sits on, {@code null}
+	 *                       when the token is ordinary code. A {@code #} on its own gives an empty
+	 *                       string.
+	 * @param macroName      whether this token is the name a naming directive gives rather than a
+	 *                       use of one, which is what keeps it from being renamed. It rides on the
+	 *                       token and not on its position because the translator inserts tokens,
+	 *                       and an insertion moves every index after it: a position recorded before
+	 *                       one names somebody else's token afterwards, and nothing on the way out
+	 *                       says so
+	 * @param macroParameter whether this token names a parameter of the {@code #define} it sits in,
+	 *                       in the list or in the replacement text, which is what keeps the two
+	 *                       spelled alike. It rides on the token for {@code macroName}'s reason: the
+	 *                       list is read before the first insertion and the rename comes after it
 	 */
-	public record Token(Kind kind, String text, String directive, boolean macroName) {
+	public record Token(Kind kind, String text, String directive, boolean macroName,
+			boolean macroParameter) {
 
 		public static final Token BLANK = new Token(Kind.SPACE, "", null);
 
 		/** A token of ordinary source, which is what everything the lexer produces starts as. */
 		public Token(Kind kind, String text, String directive) {
-			this(kind, text, directive, false);
+			this(kind, text, directive, false, false);
 		}
 
 		public boolean trivia() {
@@ -78,12 +85,17 @@ public final class GlslLexer {
 		}
 
 		public Token as(String replacement) {
-			return new Token(this.kind, replacement, this.directive, this.macroName);
+			return new Token(this.kind, replacement, this.directive, this.macroName, this.macroParameter);
 		}
 
 		/** The same token, marked as the name its directive gives. */
 		public Token naming() {
-			return new Token(this.kind, this.text, this.directive, true);
+			return new Token(this.kind, this.text, this.directive, true, this.macroParameter);
+		}
+
+		/** The same token, marked as a parameter of the macro its directive defines. */
+		public Token parameter() {
+			return new Token(this.kind, this.text, this.directive, this.macroName, true);
 		}
 	}
 

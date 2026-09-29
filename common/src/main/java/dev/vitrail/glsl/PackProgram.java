@@ -62,15 +62,18 @@ public final class PackProgram {
 	/**
 	 * The names the engine has to have an answer about before its first frame, and which it
 	 * therefore reads out of the pack's text rather than out of a program that may not be read
-	 * yet. Both are things paid for every frame and useful only to a pack that reads them.
+	 * yet. Each is a thing paid for every frame and useful only to a pack that reads it.
 	 * <p>
 	 * {@code watershadow} rides with {@code shadowtex1} because it is what moves the meaning of
 	 * the bare {@code shadow}: a program declaring it reads the map WITHOUT the translucents
 	 * under that name, so a pack writing it is a pack that may want the copy even though it
 	 * never spells {@code shadowtex1} ({@code SamplerPlan.withoutTranslucents}).
+	 * <p>
+	 * {@code dhDepthTex} stands for all three of the far terrain's names, each of which it is the
+	 * start of: the match is plain text, so a pack spelling {@code dhDepthTex1} writes it too.
 	 */
 	private static final Set<String> SETTLED_EARLY =
-			Set.of("shadowtex1", "watershadow", "depthtex2");
+			Set.of("shadowtex1", "watershadow", "depthtex2", "dhDepthTex");
 
 	/** The one name of the format the game's clouds are drawn under. */
 	private static final String CLOUD_PROGRAM = "gbuffers_clouds";
@@ -284,8 +287,8 @@ public final class PackProgram {
 	 * @param mentions which of the few names the engine has to settle before the first frame appear
 	 *                 anywhere in this pack's text. Read here because the pack is open here and
 	 *                 every source is walked here anyway; asked because six of the seven geometry
-	 *                 families are read at the first draw of their own kind, so nothing else can
-	 *                 answer for the pack as a whole this early
+	 *                 families are read by the warm-up worker after the chain is compiled, so nothing
+	 *                 else can answer for the pack as a whole this early
 	 * @param removed  the full screen programs no pipeline can be built for, by bare name, each with
 	 *                 what did it. They are gone from {@link #programs} and the plan was rebuilt
 	 *                 without them, unless the {@code final} is one of them: nothing is then removed

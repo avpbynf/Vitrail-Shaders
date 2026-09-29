@@ -125,12 +125,48 @@ final class SceneSeed {
 	private static final String EMPTY_LABEL = "Vitrail scene seed gbuffer";
 
 	/**
-	 * Which way a depth grows towards the eye, taken from the one constant that holds the game's
-	 * convention rather than written out again. The game rasterises reversed, so a fragment drawn in
-	 * front of another has the GREATER value, and reading that off {@link ClipSpace#REVERSED} means
-	 * the day the game stops reversing, this moves with it instead of quietly inverting the test.
+	 * How far the world's depth may stand in front of the mask and still be the pack's own pixel,
+	 * in float epsilons of the mask's own value.
+	 * <p>
+	 * <strong>The two are not always the same number on an Apple GPU</strong>, which is what the
+	 * comparison below was written assuming. The mask is filled from {@code gl_FragCoord.z} and the
+	 * attachment by the rasteriser, and on MoltenVK they part by one unit in the last place on some
+	 * pixels of a sloped surface: a pattern that repeats every 32 pixels, the size of that GPU's
+	 * tile, and that moves with the slope. A strict comparison read every such pixel as the game
+	 * having drawn something in front, so the seed painted the game's picture into the pack's first
+	 * draw buffer and emptied the rest. Measured on Photon's held item, which keeps its gbuffer in
+	 * {@code colortex1}: the deferred stage decoded the game's colour there as an albedo, and the
+	 * item carried light dashes on the tile boundaries for as long as the walk bob kept its slope
+	 * changing. A seed that painted only the pixels one unit apart drew every dash again, and one
+	 * that painted only those two to sixteen units apart drew none, so four is room rather than a
+	 * guess: four epsilons of a value are four to eight of its units in the last place.
+	 * <p>
+	 * Relative rather than a distance because a depth's precision is: the same slack is a hair at
+	 * the hand's squeezed band and a hair a hundred blocks out. Nothing the cut exists for is that
+	 * close. A beacon beam, a name plate or a hand the game draws for itself stands in front of the
+	 * surface behind it by millions of times as much.
 	 */
-	private static final String CLOSER = ClipSpace.REVERSED.z < 0.0F ? ">" : "<";
+	private static final int SLACK_EPSILONS = 4;
+
+	/**
+	 * The cut's one test, shared by both fragment stages so that they cannot answer it apart:
+	 * whether the world's depth stands in front of the mask by more than {@link #SLACK_EPSILONS}.
+	 * <p>
+	 * Which way is in front is taken from the one constant that holds the game's convention rather
+	 * than written out again. The game rasterises reversed, so a fragment drawn in front of another
+	 * has the GREATER value, and reading that off {@link ClipSpace#REVERSED} means the day the game
+	 * stops reversing, this moves with it instead of quietly inverting the test.
+	 * <p>
+	 * The difference of two depths this close is exact in a float, so one unit in the last place
+	 * comes out as one and never rounds past the slack. The empty mask's sentinel sits outside zero
+	 * to one on the far side, a whole unit behind every real depth, so it still takes the game's
+	 * picture everywhere, as it did under the strict comparison.
+	 */
+	private static final String IN_FRONT = String.format(Locale.ROOT, """
+			bool ofInFront(float live, float mask) {
+				return %s > abs(mask) * (%d.0 * 1.1920929e-7);
+			}
+			""", ClipSpace.REVERSED.z < 0.0F ? "live - mask" : "mask - live", SLACK_EPSILONS);
 
 	/**
 	 * How the mask says the pack wrote here at all, which is the sentinel of
@@ -173,8 +209,8 @@ final class SceneSeed {
 	 * <p>
 	 * Neither side of the first comparison is converted into the pack's window. The mask is filled
 	 * by the fragment stage from the value it hands the depth attachment, and this reads that
-	 * attachment back, so the two are the same number written by the same draw and a pixel nothing
-	 * was drawn over compares exactly equal however the game encodes its depth.
+	 * attachment back, so the two are the same number written by the same draw, however the game
+	 * encodes its depth, to within the few units in the last place {@link #SLACK_EPSILONS} is about.
 	 * <p>
 	 * <strong>The far terrain's depth is a third image and cannot enter that comparison</strong>:
 	 * it is rasterised in DH's own volume, whose near plane stands blocks out, so its numbers and
@@ -208,9 +244,10 @@ final class SceneSeed {
 
 			layout(location = 0) out vec4 ofFragData0;
 
+			%s
 			void main() {
 				float live = texture(DepthSampler, ofTexCoord).r;
-				bool infront = live %s texture(CoverageSampler, ofTexCoord).r;
+				bool infront = ofInFront(live, texture(CoverageSampler, ofTexCoord).r);
 				if (!infront) {
 					discard;
 				}
@@ -223,7 +260,7 @@ final class SceneSeed {
 
 				ofFragData0 = texture(InSampler, ofTexCoord);
 			}
-			""", CLOSER, REAL, REAL);
+			""", IN_FRONT, REAL, REAL);
 
 	/**
 	 * One draw buffer of the geometry program the seed stands in for, past the first, that the seed
@@ -364,16 +401,17 @@ final class SceneSeed {
 				in vec2 ofTexCoord;
 
 				%s
+				%s
 				void main() {
 					float mask = texture(CoverageSampler, ofTexCoord).r;
 					bool mine = mask %s;
-					bool infront = texture(DepthSampler, ofTexCoord).r %s mask;
+					bool infront = ofInFront(texture(DepthSampler, ofTexCoord).r, mask);
 					if (!mine || !infront) {
 						discard;
 					}
 				%s
 				}
-				""", outputs, WRITTEN, CLOSER, empties);
+				""", outputs, IN_FRONT, WRITTEN, empties);
 	}
 
 	/**

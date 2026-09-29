@@ -261,7 +261,8 @@ The full mechanism is in [Sky and shadows](sky-and-shadows.md#the-horizon-gap).
 **Something that moves looks flat, unlit, and out of place against the terrain.** It is one of the
 families still drawn by the game and composited in, already tone mapped, carrying the game's own
 lighting rather than the pack's. Which families those are has shrunk milestone by milestone, and the
-engine names the ones left in the log when a place first draws rather than on this page, which would
+engine names the ones left in the log when a place first draws, and one it could not read in an
+error line of its own with a message on the settings screen, rather than on this page, which would
 go out of date between two of them. What follows is what each family that IS served costs.
 
 **The rain, the snow and the quad particles are no longer among them.** They go through the pack's
@@ -346,7 +347,9 @@ rather than reporting as separate bugs:
 
 The engine names the families that still come from the game, in the log, when a place first draws.
 That line is the authority; this page does not duplicate it. A place drawn without a seed does not
-print it, and says so on a line of its own instead.
+print it, and says so on a line of its own instead. A family the pack-load worker could not read is
+not on it: the log names that one in an error line of its own, and the settings screen carries a
+message about it.
 
 What can still send one of these families back to the game for the seed's sake is narrower than it
 was, and the log names it by program: a fragment stage the translation could not place the coverage
@@ -476,6 +479,13 @@ volume before the water is drawn and lets the depth test hold it back. What a pa
 up: where the near world hides far water outright, that name answers with the far terrain behind
 the water rather than with the water, on a texel where neither is visible.
 
+**With none of it in view, those names still answer at every texel.** Looking at the sky from above
+the world's build height is such a frame: that mod culls every tile, and the far terrain is there
+with nothing of it drawn. The pack is then served the far plane in the same two full-screen images,
+which is what the mod's own emptied image answers under Iris, and not one texel of it. A pack that
+fetches its distant depth by texel, as Photon does, would read past a single texel as far terrain
+standing at the camera and paint the whole sky over in one flat pink.
+
 One limit stays whatever the log says: past Distant Horizons' own far plane there is nothing drawn,
 and the picture there is the pack's sky, exactly as without the mod.
 
@@ -495,12 +505,12 @@ A short reference, if you are writing a pack or wondering why yours is treated d
   textured gbuffers program, whose draw buffers start at the fifth target. Anything that assumes
   target zero is wrong for it.
 - **A pack can supply its own textures**, including a three-dimensional volume as a raw blob, as
-  Mellow does with its noise and Photon with its atmosphere table. Since the backend refuses a
-  declared three-dimensional sampler, the volume is laid flat onto a two-dimensional atlas and
-  reads are rewritten to interpolate two slices, whether the volume repeats or clamps and whether
-  it holds unsigned bytes, unsigned shorts or floats of either width a channel. A blob that is a
-  plain two-dimensional table, as RenderPearl's edge-blending tables are, is uploaded at the size
-  the declaration gives.
+  Mellow does with its noise and Photon with its atmosphere table. Since nothing builds a
+  three-dimensional view over a texture a pack ships, the volume is laid flat onto a
+  two-dimensional atlas and reads are rewritten to interpolate two slices, whether the volume
+  repeats or clamps and whether it holds unsigned bytes, unsigned shorts or floats of either width
+  a channel. A blob that is a plain two-dimensional table, as RenderPearl's edge-blending tables
+  are, is uploaded at the size the declaration gives.
 - **A pack can ask for an unusual shadow buffer format.** Mellow asks for a single-channel one,
   which is why the shadow pipeline's colour state is built from the attachment rather than
   hardcoded.

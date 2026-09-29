@@ -2,6 +2,7 @@ package dev.vitrail.render;
 
 import dev.vitrail.render.storage.StorageBuffers;
 import dev.vitrail.render.storage.StorageImages;
+import dev.vitrail.render.timing.FrameCensus;
 
 import org.jspecify.annotations.Nullable;
 
@@ -28,6 +29,7 @@ public final class PushedDescriptor {
 
 	/** Starts the entry named {@code name}. */
 	public static void begin(String name) {
+		FrameCensus.descriptor();
 		PushedDescriptor current = CURRENT.get();
 		current.name = name;
 		current.image = StorageImages.bound(name);

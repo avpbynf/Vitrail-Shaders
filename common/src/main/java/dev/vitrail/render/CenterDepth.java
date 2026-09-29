@@ -1,5 +1,6 @@
 package dev.vitrail.render;
 
+import dev.vitrail.render.timing.FrameCensus;
 import dev.vitrail.uniform.Smoothed;
 import dev.vitrail.Vitrail;
 
@@ -214,7 +215,9 @@ final class CenterDepth {
 
 		// Written through the game's own builder rather than into the buffer by hand, which is what
 		// every other block of this engine does: one float is a layout too, and the two would drift.
+		FrameCensus.rotated();
 		this.factor.rotate();
+		FrameCensus.chainBlockWritten();
 		try (GpuBufferSlice.MappedView view = this.factor.currentBuffer().map(false, true)) {
 			Std140Builder.intoBuffer(view.data()).putFloat(blend);
 		}

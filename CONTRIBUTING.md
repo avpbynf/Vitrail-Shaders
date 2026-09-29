@@ -323,9 +323,11 @@ compiled and run on their own, outside the game, against a corpus of real packs,
 translation regression is caught in seconds instead of in a play session. Keep the property. A
 Minecraft import in one of those three packages costs more than it looks.
 
-`render/` has no equivalent and cannot have one, since it exists only inside a frame. A change
-there is argued from the code and from the log it produces, and it is worth saying which of the two
-a claim rests on rather than leaving it implied.
+`render/` has no equivalent for what it draws, since that exists only inside a frame. A change to
+the picture is argued from the code and from the log it produces, and it is worth saying which of
+the two a claim rests on rather than leaving it implied. What in `render/` is arithmetic or a
+decision that needs no device is another matter: it is kept in classes that run on their own and
+has unit tests, so a change there is checked that way first.
 
 What each check covers, and what a clone cannot run at all because shader packs are not
 redistributable, is in [developing](docs/developing.md).

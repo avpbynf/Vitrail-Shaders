@@ -26,6 +26,10 @@ import java.util.Set;
  * which is what it was before: triangles in, a strip of three vertices out, and a
  * {@code main} made of one loop over the three corners whose body writes {@code gl_Position} and each
  * output from the same corner of one input, then {@code EmitVertex}, then {@code EndPrimitive}.
+ * Bliss spells the same loop three ways more, and each is read as that shape: the counter declared
+ * on a line of its own ahead of the loop, the corner's position held in a local it hands on
+ * unchanged, and every varying handed on under the name it came in by once its interface blocks
+ * are flattened, which the fragment stage then reads as it stands.
  * The text read is the stage after the preprocessor, which {@code render/GeometryStage} runs first,
  * so a branch the settings do not take is not there to be matched.
  * <p>
@@ -353,6 +357,19 @@ public final class GeometryFold {
 		/** The locals holding a rate, by name. */
 		private final Map<String, Rate> rates = new LinkedHashMap<>();
 
+		/**
+		 * The corner counter where the stage declares it ahead of the loop, {@code int i;} and then
+		 * {@code for (i = 0; ...)}, which is how Bliss and the packs built on it write the loop.
+		 */
+		private String counter;
+
+		/**
+		 * The local the loop holds a corner's position in before handing it on,
+		 * {@code vec4 vertex = gl_in[i].gl_Position; ... gl_Position = vertex;}, where the stage
+		 * writes it that way. Eclipse does, leaving room for the jitters its shader grass adds.
+		 */
+		private String positionLocal;
+
 		/** What the fragment stage works out before anything else, in the order the stage wrote it. */
 		private final List<String> prologue = new ArrayList<>();
 
@@ -586,6 +603,14 @@ public final class GeometryFold {
 		 * from anything that is not a corner.
 		 */
 		private void before(int from, int semicolon) throws Refused {
+			// The counter of the loop that follows, declared without a value: it holds nothing yet.
+			if (this.counter == null && this.code.is(from, "int") && this.code.identifier(from + 1)
+					&& from + 2 == semicolon) {
+				this.counter = this.code.text(from + 1);
+
+				return;
+			}
+
 			if (this.code.identifier(from) && this.code.identifier(from + 1)
 					&& this.code.is(from + 2, "=")) {
 				String type = this.code.text(from);
@@ -718,17 +743,21 @@ public final class GeometryFold {
 		}
 
 		/**
-		 * The loop over the three corners, {@code for (int i = 0; i < 3; i++)}, and the index of the
-		 * token after its closing brace.
+		 * The loop over the three corners, {@code for (int i = 0; i < 3; i++)}, or
+		 * {@code for (i = 0; i < 3; i++)} over a counter declared just before it, and the index of
+		 * the token after its closing brace.
 		 */
 		private int loop(int at, int end) throws Refused {
-			String counter = this.code.text(at + 3);
-			int step = at + 11;
-			boolean head = this.code.is(at + 1, "(") && this.code.is(at + 2, "int")
-					&& this.code.identifier(at + 3) && this.code.is(at + 4, "=")
-					&& this.code.is(at + 5, "0") && this.code.is(at + 6, ";")
-					&& this.code.is(at + 7, counter) && this.code.is(at + 8, "<")
-					&& this.code.is(at + 9, "3") && this.code.is(at + 10, ";");
+			boolean declaredHere = this.code.is(at + 2, "int");
+			int first = declaredHere ? at + 3 : at + 2;
+			String counter = this.code.text(first);
+			int step = first + 8;
+			boolean head = this.code.is(at + 1, "(")
+					&& (declaredHere || counter.equals(this.counter))
+					&& this.code.identifier(first) && this.code.is(first + 1, "=")
+					&& this.code.is(first + 2, "0") && this.code.is(first + 3, ";")
+					&& this.code.is(first + 4, counter) && this.code.is(first + 5, "<")
+					&& this.code.is(first + 6, "3") && this.code.is(first + 7, ";");
 			boolean increments = this.code.join(step, step + 3).equals(counter + " + +")
 					|| this.code.join(step, step + 3).equals("+ + " + counter);
 			int close = this.code.closing(step + 4);
@@ -750,6 +779,23 @@ public final class GeometryFold {
 						.equals("gl_Position = gl_in [ " + counter + " ] . gl_Position ;")) {
 					position = true;
 					index += 9;
+					continue;
+				}
+
+				// The same hand on through a local: the corner's position is read into it and
+				// written out of it with nothing in between, anything else being refused below.
+				if (!position && this.positionLocal == null && this.code.is(index, "vec4")
+						&& this.code.identifier(index + 1) && this.code.join(index + 2, index + 10)
+								.equals("= gl_in [ " + counter + " ] . gl_Position ;")) {
+					this.positionLocal = this.code.text(index + 1);
+					index += 10;
+					continue;
+				}
+
+				if (!position && this.positionLocal != null && this.code.join(index, index + 4)
+						.equals("gl_Position = " + this.positionLocal + " ;")) {
+					position = true;
+					index += 4;
 					continue;
 				}
 
@@ -800,7 +846,9 @@ public final class GeometryFold {
 		}
 
 		for (String name : stage.inputs.keySet()) {
-			if (spelled.contains(name)) {
+			// Copied into an output of its own name, which is the fragment stage's input already:
+			// the vertex stage's output reaches it under that name with nothing to rename.
+			if (spelled.contains(name) && !name.equals(stage.copies.get(name))) {
 				throw new Refused("hands on " + name + ", a name the fragment stage already spells");
 			}
 		}
@@ -870,6 +918,12 @@ public final class GeometryFold {
 			}
 
 			String input = stage.copies.get(name);
+			if (name.equals(input)) {
+				// The stage hands the corner on under the name it came in by, as a block of one
+				// name on both sides flattens to (Eclipse's DATA): the declaration stands as it is.
+				continue;
+			}
+
 			if (input == null) {
 				edits.add(new Edit(statement.start(), semicolon, type + " " + name + ";"));
 			} else {

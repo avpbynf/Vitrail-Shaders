@@ -2,7 +2,6 @@ package dev.vitrail.render;
 
 import dev.vitrail.dh.DhLods;
 import dev.vitrail.glsl.PackProgram;
-import dev.vitrail.pack.model.ProgramNames;
 import dev.vitrail.pack.model.RenderStage;
 import dev.vitrail.pack.model.TargetName;
 import dev.vitrail.pack.option.OptionValue;
@@ -12,9 +11,12 @@ import dev.vitrail.pack.target.ChainPlan;
 import dev.vitrail.pack.target.SamplerPlan;
 import dev.vitrail.pack.target.TargetDirectives;
 import dev.vitrail.pack.target.TargetPlan;
-import dev.vitrail.pack.target.TargetSchedule;
 import dev.vitrail.pack.texture.CustomImages;
+import dev.vitrail.render.FrameCuts.Cut;
+import dev.vitrail.render.FrameCuts.Reach;
+import dev.vitrail.render.FrameCuts.Standalone;
 import dev.vitrail.render.storage.StorageImages;
+import dev.vitrail.render.timing.FrameCensus;
 import dev.vitrail.render.timing.PassTimings;
 import dev.vitrail.HostReport;
 import dev.vitrail.ScreenText;
@@ -22,7 +24,6 @@ import dev.vitrail.uniform.ClipSpace;
 import dev.vitrail.uniform.WorldState;
 import dev.vitrail.Vitrail;
 
-import com.mojang.blaze3d.GpuDeviceLossException;
 import com.mojang.blaze3d.buffers.GpuBuffer;
 import com.mojang.blaze3d.buffers.GpuBufferSlice;
 import com.mojang.blaze3d.buffers.Std140Builder;
@@ -46,7 +47,6 @@ import java.nio.ByteOrder;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Comparator;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.EnumMap;
 import java.util.HashSet;
@@ -147,6 +147,13 @@ public final class PackChain {
 
 	private static volatile boolean chainWanted = true;
 
+	/**
+	 * What every hook of the frame does with an exception that got out of its work, so that the
+	 * order of the steps is written once. A hook that differs says how at its own catch.
+	 */
+	private static final HookFailure FAILURE = new HookFailure(PackChain::stop,
+			(text, error) -> Vitrail.logger().error(text, error));
+
 	/** Puts a chain up as the one the frame draws from, once the load has read it whole. */
 	static void activate(PackChain chain) {
 		active = chain;
@@ -243,6 +250,19 @@ public final class PackChain {
 
 	/** Whether this frame's uniform blocks have been written and its notes said. */
 	private boolean filled;
+
+	/**
+	 * What this frame is drawn against, once a call of {@link #ready} has been answered with it, and
+	 * null before that, after {@link #closeFrame} and after {@link #release}.
+	 * <p>
+	 * A call that finds the chain drawable does the same work each time: it asks the targets and the
+	 * ring whether they stand, walks every target's storage, probes the device's cache for every
+	 * pipeline of the chain and prepares the seed. None of it can have moved between the two or three
+	 * calls of one frame, and every call allocates the record. It is not kept across a frame, where
+	 * the size of the window is asked again, and not while the chain is still compiling, where each
+	 * call is what compiles the next pipeline.
+	 */
+	private Ready frame;
 
 	/**
 	 * Whether the game's own frame has already been painted in this one. The seed's rank falls on
@@ -349,7 +369,22 @@ public final class PackChain {
 	/** Whether any program of this chain reads centerDepthSmooth, settled once the passes are built. */
 	private boolean centerDepthRead;
 
-	private MappableRingBuffer block;
+	/**
+	 * Where the full screen passes' uniform blocks stand, laid out one after another by
+	 * {@link PackPass#uniformOffset}: a range of {@link #blocks}, or a ring of its own where that has
+	 * no room. Made in {@link #prepare} and given back in {@link #release}.
+	 */
+	private BlockRing.Slot block;
+
+	/**
+	 * Where every uniform block of this chain stands, the passes' above and each geometry program's:
+	 * one ring turned once a frame in {@link #closeFrame}, so that all of them together cost one fence
+	 * a frame and not one each. Made with the chain and never null, because the programs are handed it
+	 * by the draws while they are built, on the worker, long before any device call is made; the ring
+	 * itself is made at the first block, and taken down in {@link #release}.
+	 */
+	private final BlockRing blocks = new BlockRing(!PassTimings.ringPerProgram());
+
 	private GpuBuffer quad;
 	private CompiledRenderPipeline head;
 	private int blockBytes;
@@ -442,40 +477,40 @@ public final class PackChain {
 		// would leave the screen and reach nothing.
 		this.terrain = new TerrainDraw(this, packPath, chain.place(), values,
 				this.load, chain.chain(), chain.targets(), chainWanted, this.targets);
-		// The same plan and the same schedule again, and for the same reason. The sky is read on
-		// demand too, since the game builds its meshes once at startup and a place that never draws
-		// a sky should not pay for one.
-		this.sky = new SkyDraw(this, packPath, chain.place(), chosen, profile, values, this.load,
+		// The same plan and the same schedule again, and for the same reason. Nothing from here to
+		// the distant terrain is read by this constructor: the pack-load worker reads each family
+		// once the chain's composites are compiled, unless its engine option is off, and one it does
+		// not reach stays unread for the load, the game's own shaders drawing it. That is why none
+		// of them is handed the chosen values or the profile: the worker opens the pack with them.
+		this.sky = new SkyDraw(this, packPath, chain.place(), values, this.load,
 				chain.chain(), chain.targets(), chainWanted, this.targets);
-		// And again, for the same reason, and read on demand for a third one: a place the player
-		// crosses without an entity in it should not pay for ten programs it never draws.
+		// And again, for the same reason.
 		// Handed the seed's own switch as well, which neither of the other two needs: it is the one
 		// family whose first output has no road of its own into the pack's picture.
-		this.entities = new EntityDraw(this, packPath, chain.place(), chosen, profile, values,
+		this.entities = new EntityDraw(this, packPath, chain.place(), values,
 				this.load, chain.chain(), chain.targets(), chainWanted,
 				seedEnabled && this.seed != null, this.targets);
-		// And a fourth time, read on demand like the last two: a place with the clouds switched off,
-		// which is every Nether and every player who turned them off, should not pay for a program
-		// nothing draws.
-		this.clouds = new CloudDraw(this, packPath, chain.place(), chosen, profile, values,
+		// And a fourth time. With the clouds switched off in the engine's options nothing is read
+		// for them at all.
+		this.clouds = new CloudDraw(this, packPath, chain.place(), values,
 				this.load, chain.chain(), chain.targets(), chainWanted, this.targets);
-		// And once more, read on demand for a fifth reason: a pack may be loaded for an hour before
-		// it rains. It needs no switch of the seed's, being the one family here drawn WHOLLY after
+		// And once more. A pack may be loaded for an hour before it rains, so it is read ahead and
+		// not at the first drop, in the middle of a storm.
+		// It needs no switch of the seed's, being the one family here drawn WHOLLY after
 		// the deferred stage: it blends onto what the chain has already put in the pack's target,
 		// which is the position the world's own translucents are in. The particles below straddle
 		// that stage instead, and that is why they need the switch and this does not.
-		this.weather = new WeatherDraw(this, packPath, chain.place(), chosen, profile, values,
+		this.weather = new WeatherDraw(this, packPath, chain.place(), values,
 				this.load, chain.chain(), chain.targets(), chainWanted, this.targets);
 		// And the sixth, which straddles the deferred stage: its opaque half is drawn among the
 		// game's solid features and writes the coverage mask as the entities do, its translucent
 		// half after the world's water. Neither half asks whether the seed is painted, both owning
 		// the draw buffers the pack asked for.
-		this.particles = new ParticleDraw(this, packPath, chain.place(), chosen, profile, values,
+		this.particles = new ParticleDraw(this, packPath, chain.place(), values,
 				this.load, chain.chain(), chain.targets(), chainWanted, this.targets);
-		// And the seventh, read on demand like the five before it and for the sharpest reason of
-		// them: most sessions have no Distant Horizons at all, and the ones that do only reach this
-		// on the frames DH really draws a far terrain.
-		this.distant = new DistantDraw(this, packPath, chain.place(), chosen, profile, values,
+		// And the seventh. The worker reads it whether or not Distant Horizons is there; only its
+		// draw waits for the frames DH really draws a far terrain.
+		this.distant = new DistantDraw(this, packPath, chain.place(), values,
 				this.load, chain.chain(), chain.targets(), chainWanted, this.targets);
 		this.families = List.of(this.sky, this.entities, this.clouds, this.weather,
 				this.particles, this.distant);
@@ -485,22 +520,27 @@ public final class PackChain {
 		// built on the render thread, after this constructor.
 		this.compute = PackCompute.load(opened, chain.place(), chain.targets().computes(), this.load,
 				values.shadowGeometryCatalog(), values.catalog(),
-				ordered(chain.chain()).stream().map(ChainPlan.Pass::program)
+				FrameCuts.ordered(chain.chain()).stream().map(ChainPlan.Pass::program)
 						.collect(Collectors.toSet()),
 				Set.copyOf(chain.targets().passing()));
 		// Before the first frame allocates a target: the storage usage is baked into the image at
 		// creation, and nothing can add it afterwards. Whatever stores into a target asks for it: a
 		// compute, a full screen program, read off their translated text, and a world program,
-		// which is only translated when first drawn and so is read off the pack's text instead.
+		// which is translated after this constructor and so is read off the pack's text instead.
 		Set<Integer> stored = new LinkedHashSet<>(this.compute.storageTargets());
 		stored.addAll(chain.targets().stored());
-		for (ChainPlan.Pass pass : ordered(chain.chain())) {
+		for (ChainPlan.Pass pass : FrameCuts.ordered(chain.chain())) {
 			PackProgram.Loaded loaded = chain.programs().get(pass.program());
 			if (loaded != null) {
 				stored.addAll(PackPass.colourImages(loaded));
 			}
 		}
 		this.targets.storageTargets(stored);
+	}
+
+	/** Where the geometry programs of this chain keep their uniform blocks. */
+	BlockRing blocks() {
+		return this.blocks;
 	}
 
 	/**
@@ -793,12 +833,8 @@ public final class PackChain {
 				// of it: closeFrame turns them below, drawn or not.
 				chain.beginFrame();
 			}
-		} catch (GpuDeviceLossException e) {
-			throw e;
 		} catch (RuntimeException e) {
-			stop();
-			Vitrail.logger().error("Vitrail stopped drawing this pack after an error", e);
-			chain.release();
+			FAILURE.abandon(e, chain::release);
 		}
 
 		// Outside the try: a frame that failed halfway still owes its flags and its ring buffers.
@@ -963,18 +999,12 @@ public final class PackChain {
 
 				return;
 			} while (System.nanoTime() < deadline);
-		} catch (GpuDeviceLossException e) {
-			// Not about this pack: the device is gone, and PackChoice rethrows it out of a release
-			// for the same reason.
-			throw e;
 		} catch (RuntimeException e) {
 			// A pipeline the driver will not build throws out of precompilePipeline rather than coming
 			// back invalid, which is what MoltenVK does with a stage Metal refuses, and nothing between
 			// here and the game loop caught it. The reference stops drawing the pack and draws the
 			// game's own picture on an exception while it builds its pipeline, and so does this.
-			stop();
-			Vitrail.logger().error("Vitrail stopped drawing this pack after an error", e);
-			chain.release();
+			FAILURE.abandon(e, chain::release);
 		}
 	}
 
@@ -1038,25 +1068,38 @@ public final class PackChain {
 			return;
 		}
 
-		// The frame opens HERE, not at the first draw, and the compute's correctness hangs on it.
-		// The values only move at beginFrame, so without this the dispatch reads the PREVIOUS
-		// frame's numbers: the floodfill then runs under the old frameCounter parity and writes
-		// the half this frame's gbuffers do not read, and every voxel light flickers as the
-		// player moves. Idempotent for the rest of the frame, which sees the same numbers it
-		// always did, only settled a moment earlier.
-		chain.beginFrame();
-		chain.reanchorCustomImages();
-		chain.compute.dispatch(chain.values, chain.targets);
+		try {
+			// The frame opens HERE, not at the first draw, and the compute's correctness hangs on it.
+			// The values only move at beginFrame, so without this the dispatch reads the PREVIOUS
+			// frame's numbers: the floodfill then runs under the old frameCounter parity and writes
+			// the half this frame's gbuffers do not read, and every voxel light flickers as the
+			// player moves. Idempotent for the rest of the frame, which sees the same numbers it
+			// always did, only settled a moment earlier.
+			chain.beginFrame();
+			chain.reanchorCustomImages();
+			chain.compute.dispatch(chain.values, chain.targets);
 
-		// And the table goes back to the window every block of the chain is written under, because
-		// the dispatch above leaves the light's standing behind it. This stage stands between the
-		// two ranges the frame opens with, and a compute of the prepares writes its block off the
-		// live table at the moment it is dispatched, where a pass reads a block written once at the
-		// head of the frame: left flipped, a place with a begin ahead of this stage and a shadow
-		// compute in it hands every compute of its prepares the light's window instead of the
-		// screen's. Put back where it is flipped rather than at the head of each range, so that a
-		// range drawn here later cannot forget what it never has to know.
-		chain.values.convention(ClipSpace.REVERSED);
+			// And the table goes back to the window every block of the chain is written under,
+			// because the dispatch above leaves the light's standing behind it. This stage stands
+			// between the two ranges the frame opens with, and a compute of the prepares writes its
+			// block off the live table at the moment it is dispatched, where a pass reads a block
+			// written once at the head of the frame: left flipped, a place with a begin ahead of this
+			// stage and a shadow compute in it hands every compute of its prepares the light's window
+			// instead of the screen's. Put back where it is flipped rather than at the head of each
+			// range, so that a range drawn here later cannot forget what it never has to know.
+			chain.values.convention(ClipSpace.REVERSED);
+		} catch (RuntimeException e) {
+			// The table is NOT put back on this road, and no undo stands in for it, unlike
+			// openFeatures. What that one takes back is the game's own state, which outlives the
+			// chain and swallows every later feature draw of the frame; this one is the chain's own
+			// store, and the chain is stopped and released here. Nothing reads it afterwards: the
+			// prepares that follow this stage return on the stop, every family answers null once
+			// the chain is stopped, and a writer of a block sets the convention before it writes,
+			// this dispatch, writeBlocks and GeometryProgram.writeBlock alike. So a throw between
+			// the flip and the line above leaves the light's window standing where nothing can read
+			// it.
+			FAILURE.abandon(e, chain::release);
+		}
 	}
 
 	/**
@@ -1233,6 +1276,7 @@ public final class PackChain {
 		// frame before's world.
 		this.targets.copies().forget();
 		this.filled = false;
+		this.frame = null;
 		this.seeded = false;
 		this.sceneDepth = false;
 
@@ -1246,10 +1290,15 @@ public final class PackChain {
 		// The far terrain's pair is on the same per frame rule, and PackDepth says why.
 		this.targets.depth().forgetDistant();
 
+		// The ring every block stands in turns here, once, and by the chain: a block that has a ring
+		// of its own turns it beside, and a program's own rotate below drops what the program set on
+		// a pass. Turned from the programs' rotates it would turn once for every one of them, and not
+		// at all on a frame that reaches none.
 		if (this.block != null) {
 			this.block.rotate();
 		}
 
+		this.blocks.rotate();
 		this.terrain.rotate();
 		// Only families the worker has finished translating. drawable() is true once the
 		// composites and the terrain are compiled, which is earlier than leftover families
@@ -1304,6 +1353,15 @@ public final class PackChain {
 	 * {@link #beforeLevel} asks that question at the head of the frame instead, so the reload a
 	 * join owes stands before the first allocation rather than after it, and the frame the world
 	 * appears on pays once.
+	 * <p>
+	 * <strong>Nothing here starts the pack-load workers again, and nothing has to.</strong> A
+	 * {@code FamilyWarmup} runs once and its release is final, so a chain that lived on into the
+	 * next world would read none of the six families and the game's own shaders would draw them. It
+	 * does not live on: the first frame of every world reads the pack again ({@link #beforeLevel},
+	 * and {@link #draw} where that road is off), because {@link PackDefines#stale} finds the
+	 * identity hash of the world's registry access different from the one of the last read, and each
+	 * connection is given a registry access of its own. A change that lets a chain outlive a join
+	 * has to start its warm-up again here first.
 	 */
 	public static void leaveWorld() {
 		PackChain chain = active;
@@ -1334,11 +1392,10 @@ public final class PackChain {
 			// NOT replaced on the way out, so nothing else would ever reset it, and a world joined
 			// again would be measured against where the player stood in the one they left.
 			chain.voxelAnchored = false;
-		} catch (GpuDeviceLossException e) {
-			throw e;
 		} catch (RuntimeException e) {
-			stop();
-			Vitrail.logger().error("Vitrail stopped drawing this pack after an error", e);
+			// No release of its own, unlike every other hook: the try above holds it, and a chain it
+			// has already released is not released twice.
+			FAILURE.abandon(e, HookFailure.NOTHING);
 		}
 	}
 
@@ -1347,10 +1404,20 @@ public final class PackChain {
 	 * drawn at all. Cheap and idempotent, so both halves of the frame may ask.
 	 */
 	private Ready ready(GpuDevice device) {
+		FrameCensus.ready();
 		Minecraft minecraft = Minecraft.getInstance();
 		RenderTarget main = minecraft == null ? null : minecraft.gameRenderer.mainRenderTarget();
 		if (main == null || main.getColorTexture() == null) {
 			return null;
+		}
+
+		// The frame's answer, for as long as it is still the target the game draws into: a target
+		// the game made again in the middle of a frame is another set of views and is asked for again.
+		Ready held = this.frame;
+		if (held != null && held.stands(main)) {
+			FrameCensus.readyDone();
+
+			return held;
 		}
 
 		if (this.programs == null) {
@@ -1371,6 +1438,7 @@ public final class PackChain {
 		// Outside any render pass, both of them: creating a texture or a buffer records a barrier
 		// into the very command buffer a pass would be recording into, and the clears refuse
 		// outright while one is open.
+		FrameCensus.readyPrepared();
 		if (!prepare(device, main) || !warm(device)) {
 			return null;
 		}
@@ -1394,9 +1462,12 @@ public final class PackChain {
 		}
 
 		openTargets(device);
+		FrameCensus.readyDone();
 
-		return new Ready(main, mainView, GraphicsApi.hasDepth(main) ? main.getDepthTextureView() : null,
-				seeding);
+		this.frame = new Ready(main, mainView,
+				GraphicsApi.hasDepth(main) ? main.getDepthTextureView() : null, seeding);
+
+		return this.frame;
 	}
 
 	/**
@@ -1436,7 +1507,8 @@ public final class PackChain {
 		// the chain is one whole serialisation of the GPU per program and there is no way around
 		// it short of knowing which passes do not overlap.
 		CommandEncoder encoder = device.createCommandEncoder();
-		GpuBuffer buffer = this.block.currentBuffer();
+		GpuBuffer buffer = this.block.buffer();
+		int blockAt = this.block.offset();
 		// The chains this walk has filled and nothing has written over since, by target and side.
 		// Emptied at the head because the range starts after geometry the plan does not see, and
 		// again wherever a write this loop cannot place lands: the seed paints targets of its own
@@ -1491,7 +1563,8 @@ public final class PackChain {
 				}
 			}
 
-			GpuBufferSlice uniforms = buffer.slice(pass.uniformOffset(), pass.uniformSize());
+			GpuBufferSlice uniforms = buffer.slice(blockAt + pass.uniformOffset(),
+					pass.uniformSize());
 			if (pass == this.last) {
 				pass.drawFinal(encoder, ready.mainView(), this.targets, depth, distant, this.quad,
 						uniforms);
@@ -1574,26 +1647,16 @@ public final class PackChain {
 		}
 	}
 
-	/**
-	 * Which of a cut's standalones one dispatch takes. The walk reaches each of them once: on the
-	 * index of the pass it runs before, or, past the last pass of the cut, at the end of the range.
-	 */
-	private enum Reach {
-
-		/** Those standing on the index the loop has reached. */
-		AT_INDEX,
-
-		/** Those no pass of the cut follows, taken at the end of the range. */
-		PAST_END;
-
-		boolean takes(Standalone waiting, int at) {
-			return this == PAST_END ? waiting.at() >= at : waiting.at() == at;
-		}
-	}
-
 	/** What one frame of the chain is drawn against, settled once and read by both halves. */
 	private record Ready(RenderTarget main, GpuTextureView mainView, GpuTextureView depthView,
 			boolean seeding) {
+
+		/** Whether this is still the game's target and the two images of it that were read. */
+		@SuppressWarnings("ReferenceEquality")
+		boolean stands(RenderTarget target) {
+			return this.main == target && this.mainView == target.getColorTextureView()
+					&& this.depthView == (GraphicsApi.hasDepth(target) ? target.getDepthTextureView() : null);
+		}
 	}
 
 	/**
@@ -1622,12 +1685,8 @@ public final class PackChain {
 
 		try {
 			chain.drawBegins(device);
-		} catch (GpuDeviceLossException e) {
-			throw e;
 		} catch (RuntimeException e) {
-			stop();
-			Vitrail.logger().error("Vitrail stopped drawing this pack after an error", e);
-			chain.release();
+			FAILURE.abandon(e, chain::release);
 		}
 	}
 
@@ -1657,12 +1716,8 @@ public final class PackChain {
 
 		try {
 			chain.drawPrepares(device);
-		} catch (GpuDeviceLossException e) {
-			throw e;
 		} catch (RuntimeException e) {
-			stop();
-			Vitrail.logger().error("Vitrail stopped drawing this pack after an error", e);
-			chain.release();
+			FAILURE.abandon(e, chain::release);
 		}
 	}
 
@@ -1693,12 +1748,8 @@ public final class PackChain {
 
 		try {
 			chain.drawEarly(device);
-		} catch (GpuDeviceLossException e) {
-			throw e;
 		} catch (RuntimeException e) {
-			stop();
-			Vitrail.logger().error("Vitrail stopped drawing this pack after an error", e);
-			chain.release();
+			FAILURE.abandon(e, chain::release);
 		}
 	}
 
@@ -1713,9 +1764,12 @@ public final class PackChain {
 	 * translucent chunk group, which is still ahead. Every reader of the early half is downstream
 	 * too, the deferred stage first of all.
 	 * <p>
-	 * Only when a pack is being drawn, and only on the frames the pack really drew the far terrain:
-	 * on every other frame the {@code dhDepthTex} names keep answering the far plane, and every
-	 * Distant Horizons branch of the pack stays shut, exactly as without the mod.
+	 * Only when a pack is being drawn, and taken only on the frames the pack really drew the far
+	 * terrain. On a frame it drew none the {@code dhDepthTex} names answer the far plane, and every
+	 * Distant Horizons branch of the pack stays shut: out of the one texel white where the pack was
+	 * never told of the far terrain, as without the mod, and out of the same pair of images, filled
+	 * with the far plane, where it was told and there is simply nothing of it in view, as DH's own
+	 * emptied image answers under Iris.
 	 */
 	public static void takeDistantDepth() {
 		PackChain chain = active;
@@ -1733,21 +1787,30 @@ public final class PackChain {
 		DhLods.install();
 
 		GpuTextureView served = chain.distant.served();
-		if (served == null) {
+		if (served == null && !chain.readsDistantDepth()) {
 			return;
 		}
 
 		// Caught like every other point the game calls this engine back at: an exception here reaches
 		// the game through an event handler and comes back on the very next frame.
 		try {
+			if (served == null) {
+				// Nothing of the far terrain in view, which is not the far terrain being absent: the
+				// pack was told it is there and reads its depth by texel. PackDepth.takeDistantNothing
+				// says why the one texel white will not do for that.
+				RenderTarget main = minecraft.gameRenderer.mainRenderTarget();
+				if (main != null) {
+					chain.targets.depth().takeDistantNothing(device.createCommandEncoder(), main.width,
+							main.height);
+				}
+
+				return;
+			}
+
 			chain.targets.depth().takeDistantOpaque(device.createCommandEncoder(), device,
 					chain.quad(device), served, served.getWidth(0), served.getHeight(0));
-		} catch (GpuDeviceLossException e) {
-			throw e;
 		} catch (RuntimeException e) {
-			stop();
-			Vitrail.logger().error("Vitrail stopped drawing this pack after an error", e);
-			chain.release();
+			FAILURE.abandon(e, chain::release);
 		}
 	}
 
@@ -1770,6 +1833,16 @@ public final class PackChain {
 	/** The same question for the depth taken before the hand, which a pack reads as depthtex2. */
 	private boolean mayReadPreHandDepth() {
 		return this.chain.mentions().maybe("depthtex2");
+	}
+
+	/**
+	 * Whether a frame with no far terrain in view owes this pack a far plane the size of the
+	 * screen: it was handed {@code DISTANT_HORIZONS}, so its distant roads are compiled in, and some
+	 * source of it names the far terrain's depth. Off the pack's text for the reason the two above
+	 * are.
+	 */
+	private boolean readsDistantDepth() {
+		return PackDefines.distantHorizons() && this.chain.mentions().maybe("dhDepthTex");
 	}
 
 	/**
@@ -1844,12 +1917,8 @@ public final class PackChain {
 		try {
 			chain.targets.depth().takePreHand(device.createCommandEncoder(), device, chain.quad(device),
 					main.getDepthTextureView(), main.width, main.height);
-		} catch (GpuDeviceLossException e) {
-			throw e;
 		} catch (RuntimeException e) {
-			stop();
-			Vitrail.logger().error("Vitrail stopped drawing this pack after an error", e);
-			chain.release();
+			FAILURE.abandon(e, chain::release);
 		}
 	}
 
@@ -1899,12 +1968,8 @@ public final class PackChain {
 						+ "always-on-top features, so what this pack reads as depthtex0 is the world "
 						+ "rather than the far plane");
 			}
-		} catch (GpuDeviceLossException e) {
-			throw e;
 		} catch (RuntimeException e) {
-			stop();
-			Vitrail.logger().error("Vitrail stopped drawing this pack after an error", e);
-			chain.release();
+			FAILURE.abandon(e, chain::release);
 		}
 	}
 
@@ -1958,11 +2023,11 @@ public final class PackChain {
 
 		RenderTarget main = minecraft.gameRenderer.mainRenderTarget();
 
-		// Caught like every other entry point this bus calls. These two were the only ones without
-		// it, and they are the worst place to be missing one: an exception here reaches the game
-		// through an event handler and comes back on the very next frame, so what the player sees
-		// is not a pack that stopped drawing but a game that will not run. The layer's compile is
-		// inside it too, a pipeline the driver refuses throwing rather than coming back invalid.
+		// Caught like every other entry point this bus calls, every hook ending in HookFailure: an
+		// exception here reaches the game through an event handler and comes back on the very next
+		// frame, so what the player sees is not a pack that stopped drawing but a game that will
+		// not run. The layer's compile is inside it too, a pipeline the driver refuses throwing
+		// rather than coming back invalid.
 		try {
 			// The layer's own pipeline is compiled on the refused frames too, and deliberately
 			// before the question below rather than after it: it is one more pipeline the frame
@@ -1978,16 +2043,13 @@ public final class PackChain {
 
 			GameRender.redirectFeatures(layer, main.getDepthTextureView());
 			chain.redirected = true;
-		} catch (GpuDeviceLossException e) {
-			throw e;
 		} catch (RuntimeException e) {
 			// The overrides are cleared on the way out rather than left half set: one standing past
 			// this point swallows every later feature draw of the frame.
-			GameRender.endFeatureRedirect();
-			chain.redirected = false;
-			stop();
-			Vitrail.logger().error("Vitrail stopped drawing this pack after an error", e);
-			chain.release();
+			FAILURE.abandon(e, () -> {
+				GameRender.endFeatureRedirect();
+				chain.redirected = false;
+			}, chain::release);
 		}
 	}
 
@@ -2021,12 +2083,8 @@ public final class PackChain {
 
 		try {
 			chain.takeReadCopies(device);
-		} catch (GpuDeviceLossException e) {
-			throw e;
 		} catch (RuntimeException e) {
-			stop();
-			Vitrail.logger().error("Vitrail stopped drawing this pack after an error", e);
-			chain.release();
+			FAILURE.abandon(e, chain::release);
 		}
 	}
 
@@ -2095,12 +2153,8 @@ public final class PackChain {
 			// the layer would sit on stale texels and be erased with them at the deferred flush.
 			chain.features.compose(device.createCommandEncoder(), chain.quad, view,
 					chain.targets.takeClear(view));
-		} catch (GpuDeviceLossException e) {
-			throw e;
 		} catch (RuntimeException e) {
-			stop();
-			Vitrail.logger().error("Vitrail stopped drawing this pack after an error", e);
-			chain.release();
+			FAILURE.abandon(e, chain::release);
 		}
 	}
 
@@ -2499,7 +2553,7 @@ public final class PackChain {
 		List<PackPass> built = new ArrayList<>();
 		int offset = 0;
 
-		for (ChainPlan.Pass pass : ordered(plan)) {
+		for (ChainPlan.Pass pass : FrameCuts.ordered(plan)) {
 			PackProgram.Loaded loaded = this.chain.programs().get(pass.program());
 			if (loaded == null) {
 				// The plan and the programs come out of one reading of the pack, so this is the
@@ -2514,161 +2568,17 @@ public final class PackChain {
 		}
 
 		this.programs = List.copyOf(built);
-		this.standalone = standaloneOf(built);
-		// Asked of the plan and not of the list: ordered() puts the final at the end when there is
-		// one, and where there is none the last of the list is an ordinary composite that writes
-		// its own targets. Drawing that one onto the game's target would be the chain's middle
-		// painted over the screen.
+		this.standalone = FrameCuts.standaloneOf(this.compute.standingAlone(),
+				this.targets.schedule(), built.stream().map(PackPass::program).toList());
+		// Asked of the plan and not of the list: FrameCuts.ordered() puts the final at the end when
+		// there is one, and where there is none the last of the list is an ordinary composite that
+		// writes its own targets. Drawing that one onto the game's target would be the chain's
+		// middle painted over the screen.
 		this.last = plan.last().isEmpty() || built.isEmpty() ? null : built.get(built.size() - 1);
 		// Or a compute hanging off a pass: it is handed the same texel, so it arms the same fold.
 		this.centerDepthRead = built.stream().anyMatch(PackPass::readsCenterDepth)
 				|| this.compute.readsCenterDepth();
 		this.blockBytes = Math.max(alignment, offset);
-	}
-
-	/** The chain in frame order, the final last, which is the order everything downstream keeps. */
-	private static List<ChainPlan.Pass> ordered(ChainPlan plan) {
-		List<ChainPlan.Pass> all = new ArrayList<>(plan.passes());
-		plan.last().ifPresent(all::add);
-
-		return all;
-	}
-
-	/** The last rank the begins' cut carries, which is the rank the plan cuts the pass list at. */
-	private static final int BEGIN_RANK = ProgramNames.frameRank("begin");
-
-	/** The same for the prepares' cut, and the same boundary of the plan. */
-	private static final int PREPARE_RANK = ProgramNames.frameRank("prepare");
-
-	/** The same for the cut that ends on the world's translucents. */
-	private static final int DEFERRED_RANK = ProgramNames.frameRank("deferred");
-
-	/**
-	 * A cut of the frame: a stretch of the chain the renderer records at one moment of the game's
-	 * own, drawn by one call of {@link #drawRange}.
-	 * <p>
-	 * A program belongs to the cut its FAMILY'S rank puts it in, and only to that one. A pass has no
-	 * need to be told, holding a place in a list the cuts are windows onto; a compute of a program
-	 * nothing draws holds no such place, so the cut is what it is given and the index only says
-	 * where inside the cut it goes. Deciding it off the index instead read the cut out of the
-	 * boundary between the two, which is the plan's count of what runs early and says nothing about
-	 * a program that is not counted: Pegasus, whose whole chain is composites, has a {@code prepare}
-	 * compute at index nought and a boundary at nought, and the late cut's walk ran it after the
-	 * world.
-	 * <p>
-	 * <strong>The prepares are a cut of their own, and that is what answers for a compute of theirs
-	 * against the scene seed.</strong> Noble's world0 stands a {@code prepare} compute on the first
-	 * deferred pass, which is the index the seed is painted at. Carried by the cut its family names,
-	 * it is dispatched before the world is drawn at all, so there is no seed in that range for it to
-	 * fall on either side of; its world1, which ships the pass, runs the same step at the same moment.
-	 */
-	private enum Cut {
-
-		/** The begins, drawn ahead of the shadow stage and before the world. */
-		AHEAD_OF_SHADOWS,
-
-		/** The prepares, drawn behind that stage and still before the world. */
-		BEFORE_WORLD,
-
-		/** The seed and the deferreds, drawn before the world's translucents. */
-		BEFORE_TRANSLUCENTS,
-
-		/** The composites and the final, drawn after them. */
-		AFTER_TRANSLUCENTS;
-
-		/**
-		 * Where the frame runs the family of that program. One comparison against the last rank each
-		 * cut carries, which is how another cut is added: the ranks are the same ranks and every
-		 * boundary the frame graph draws is another line through them.
-		 */
-		static Cut of(String program) {
-			int rank = rankOf(program);
-			if (rank <= BEGIN_RANK) {
-				return AHEAD_OF_SHADOWS;
-			}
-
-			if (rank <= PREPARE_RANK) {
-				return BEFORE_WORLD;
-			}
-
-			return rank <= DEFERRED_RANK ? BEFORE_TRANSLUCENTS : AFTER_TRANSLUCENTS;
-		}
-	}
-
-	/**
-	 * Where the frame runs a program, read off its family and never off a position in a list: it is
-	 * what places a program the chain draws nothing for, against every boundary the frame is cut
-	 * at.
-	 */
-	private static int rankOf(String program) {
-		return ProgramNames.frameRank(ProgramNames.familyOf(TargetName.bareName(program)));
-	}
-
-	/**
-	 * A compute of a program this place draws no pass for, with where the walk dispatches it.
-	 *
-	 * @param cut     the cut of the frame its family belongs to, which is the whole of what decides
-	 *                which of the frame's four moments it runs at
-	 * @param at      the index in {@link #programs} of the first pass that runs after it, or the
-	 *                length of the list where every pass of the chain runs before it. Past the end of
-	 *                its own cut it is dispatched at that end, the cut being where the frame stops
-	 *                carrying its family at all
-	 * @param program the program it hangs off, which is the name its halves and its texture stage are
-	 *                read under however little of it is drawn
-	 * @param step    the halves it reads, from {@link TargetSchedule#passing} and never from a pass:
-	 *                there is none, and the step of the pass after it would carry the flips of every
-	 *                stage opened in between
-	 */
-	private record Standalone(Cut cut, int at, String program, TargetSchedule.Bound step) {
-	}
-
-	/**
-	 * Places each of them in the walk, at the moment the program it hangs off would have run.
-	 * <p>
-	 * Iris puts its compute-only pass at the index the missing program holds inside its own stage
-	 * ({@code CompositeRenderer.java:137-145}), so the moment is the program's place in the frame
-	 * and not the head of its stage: a pack shipping {@code composite3.csh} with no
-	 * {@code composite3.fsh} runs it after {@code composite2} and before {@code composite4}, and the
-	 * halves it reads are the ones those two left behind. Read off the names for the same reason the
-	 * plan reads its ranks off them: a position in a list moves the moment the day a pass is cut,
-	 * and it moves without a word.
-	 * <p>
-	 * Sorted in frame order, which is what settles two that land on the same index: RenderPearl
-	 * draws no full screen pass at all and ships five such computes, so all five stand on index
-	 * nought, and taken in the order their file names came out of the map its {@code deferred} ran
-	 * after its {@code composite3}.
-	 */
-	private List<Standalone> standaloneOf(List<PackPass> built) {
-		if (this.compute.standingAlone().isEmpty()) {
-			return List.of();
-		}
-
-		Comparator<String> order = ProgramNames.frameOrder();
-		List<Standalone> waiting = new ArrayList<>();
-		for (String program : this.compute.standingAlone()) {
-			TargetSchedule.Bound step = this.targets.schedule().passing(program).orElse(null);
-			// The plan named it and the schedule did not, which is the plan disagreeing with itself
-			// rather than anything a pack can cause. Left undispatched: a compute pushed with no
-			// halves would be handed no colour target at all and throw once per frame.
-			if (step == null) {
-				Vitrail.logger().warn("compute of {} is not dispatched: the schedule gives it no "
-						+ "halves to read", program);
-				continue;
-			}
-
-			// The same test the plan stops its walk of the overrides on, so that the moment this
-			// dispatch takes and the halves the plan says it reads are the one answer.
-			int at = 0;
-			while (at < built.size() && ProgramNames.before(built.get(at).program(), program)) {
-				at++;
-			}
-
-			waiting.add(new Standalone(Cut.of(program), at, program, step));
-		}
-
-		waiting.sort(Comparator.comparing(Standalone::program, order));
-
-		return List.copyOf(waiting);
 	}
 
 	/**
@@ -2681,11 +2591,12 @@ public final class PackChain {
 	 * <p>
 	 * After the composites, terrain pipelines compile a call. The other families translate AND
 	 * compile on a worker: Complementary Unbound's leftover pipelines are the minute between
-	 * packs, and holding the world for them is that minute. A first draw the worker has not
-	 * reached yet still pays shaderc on the render thread, which is the fallback and no longer
-	 * the rule. {@link #pumpWarmup} repeats the compiles here for as long as a short budget on
-	 * the frame allows. The device cache itself is only ever written on the render thread: the
-	 * worker builds the objects, {@code GeometryProgram.compile} hands them over.
+	 * packs, and holding the world for them is that minute. A first draw of a family the worker
+	 * has read and not yet compiled pays shaderc on the render thread, which is the fallback and
+	 * not the rule, and a family it has not read is drawn by the game. {@link #pumpWarmup}
+	 * repeats the compiles here for as long as a short budget on the frame allows. The device
+	 * cache itself is only ever written on the render thread: the worker builds the objects,
+	 * {@code GeometryProgram.compile} hands them over.
 	 * <p>
 	 * A place with no full screen pass at all has nothing here to compile and is not refused for
 	 * it, so long as computes stand alone in it. It has a frame to run then: the reference builds
@@ -2717,9 +2628,10 @@ public final class PackChain {
 		startFamilyPrefetch();
 
 		// Terrain is the world frame. Complementary Unbound's leftover families are the minute
-		// between packs; the worker compiles them while the world is already being played, and a
-		// first draw that outruns it falls back here. Terrain is a handful of pipelines, and the
-		// first world frame hitches without them.
+		// between packs; the worker reads and compiles them while the world is already being
+		// played, a first draw of one it has read and not yet compiled falls back to compiling
+		// here, and one it has not read is drawn by the game. Terrain is a handful of pipelines,
+		// and the first world frame hitches without them.
 		//
 		// THE LEFTOVERS ARE NOT COMPILED ON THIS THREAD, and that is a decision rather than an
 		// omission. Doing it a program a frame, here, cost two minutes at two frames a second on
@@ -2945,10 +2857,9 @@ public final class PackChain {
 		quad(device);
 
 		if (this.block == null) {
-			// Three buffers and a fence per turn, so a frame never writes over what the previous
-			// one is still being read for.
-			this.block = new MappableRingBuffer(() -> BLOCK_LABEL,
-					GpuBuffer.USAGE_UNIFORM | GpuBuffer.USAGE_MAP_WRITE, this.blockBytes);
+			// The ring has three buffers and a fence per turn, so a frame never writes over what the
+			// previous one is still being read for.
+			this.block = this.blocks.open(device, () -> BLOCK_LABEL, this.blockBytes);
 		}
 
 		// Compared against the window every frame rather than driven by an event: the resize event
@@ -3024,7 +2935,8 @@ public final class PackChain {
 		this.values.passColour(null);
 		this.values.projection(null);
 
-		try (GpuBufferSlice.MappedView view = this.block.currentBuffer().map(false, true)) {
+		FrameCensus.chainBlockWritten();
+		try (GpuBufferSlice.MappedView view = this.block.map()) {
 			ByteBuffer data = view.data();
 			for (PackPass pass : this.programs) {
 				data.position(pass.uniformOffset());
@@ -3268,6 +3180,8 @@ public final class PackChain {
 			this.warmup.familyPrograms(family).forEach(DumpedProgram::discardAhead);
 		}
 
+		// Ahead of the targets going back, so that no answer names an image that is no longer there.
+		this.frame = null;
 		CustomImages.clear();
 		// Beside it, and said here as well as at the head of a load: leaving a world releases the
 		// chain without replacing it, so this is the moment the pack's declaration stops holding,
@@ -3288,10 +3202,14 @@ public final class PackChain {
 			this.families.forEach(FamilyDraw::release);
 		}
 
+		// The passes' block and then the ring, after every program has given its range back: one
+		// handed back to a ring that is gone could not be told from a range of the next ring.
 		if (this.block != null) {
 			this.block.close();
 			this.block = null;
 		}
+
+		this.blocks.close();
 
 		if (this.quad != null) {
 			this.quad.close();

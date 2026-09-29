@@ -20,8 +20,8 @@ import java.util.List;
  * <p>
  * Two answers are kept between calls instead of being worked out again, where a function ends and
  * which line each token is on, and they belong here for the same reason: only an edit made
- * through this class can make either stale, and every edit goes through {@link #set} or
- * {@link #insertClosings}, which is where each answer is dropped.
+ * through this class can make either stale, and every edit goes through {@link #set},
+ * {@link #insertTokens} or {@link #insertClosings}, which is where each answer is dropped.
  */
 final class TokenStream implements Iterable<Token> {
 
@@ -65,11 +65,16 @@ final class TokenStream implements Iterable<Token> {
 	}
 
 	/**
-	 * Marks a token as the name a naming directive gives, which is the one thing a pass may put on
-	 * a token from outside. Everything else the passes leave behind is a rewrite of its text.
+	 * Marks a token as the name a naming directive gives, which is one of the two things a pass may
+	 * put on a token from outside. Everything else the passes leave behind is a rewrite of its text.
 	 */
 	void naming(int index) {
 		set(index, this.tokens.get(index).naming());
+	}
+
+	/** Marks a token as a parameter of its {@code #define}, the other of the two. */
+	void parameter(int index) {
+		set(index, this.tokens.get(index).parameter());
 	}
 
 	/** One closing the wrap owes, put in once the scan that found it has finished reading. */
@@ -116,12 +121,14 @@ final class TokenStream implements Iterable<Token> {
 	/**
 	 * Inserting shifts every index after it, so the last insertion is made first.
 	 * <p>
-	 * This is the one place that moves a token, both passes that close a wrap coming through it,
-	 * and so the one place that can make a position stale. What a later pass has to know about a
-	 * token is carried on the token for that reason, as {@link Token#macroName()} is: a position
-	 * kept across here would be read against somebody else's token, and nothing downstream can
-	 * tell. The two answers this class keeps about the list, the function end and the line table,
-	 * are thrown away here for the same reason.
+	 * This and {@link #insertTokens} are the two places that move a token, every pass that closes a
+	 * wrap coming through here and the flattening of interface blocks through the other, and so the
+	 * two places that can make a position stale. What a later pass has to know about a token is
+	 * carried on the token for that reason, as {@link Token#macroName()} and
+	 * {@link Token#macroParameter()} are: a position kept across either would be read against
+	 * somebody else's token, and nothing downstream can tell. The two answers this class keeps
+	 * about the list, the function end and the line table, are thrown away in both for the same
+	 * reason.
 	 */
 	void insertClosings(List<Closing> closings) {
 		if (closings.isEmpty()) {
@@ -210,11 +217,11 @@ final class TokenStream implements Iterable<Token> {
 	}
 
 	/**
-	 * Puts one token in place of another, which is the one way a token changes short of
-	 * {@link #insertClosings}. The function end is forgotten every time, since a brace may have
-	 * gone or come. The line table is kept unless the count of breaks moved: no caller hands in a
-	 * text with a break in it, and none takes a token that had one, but the rule is kept here
-	 * and not by every caller remembering it.
+	 * Puts one token in place of another, which is the one way a token changes short of an
+	 * insertion. The function end is forgotten every time, since a brace may have gone or come.
+	 * The line table is kept unless the count of breaks moved: no caller hands in a text with a
+	 * break in it, and none takes a token that had one, but the rule is kept here and not by
+	 * every caller remembering it.
 	 */
 	private void set(int index, Token token) {
 		this.functionEndFor = -1;
@@ -312,12 +319,12 @@ final class TokenStream implements Iterable<Token> {
 	 * Which line of the expanded unit each token sits on.
 	 * <p>
 	 * Kept between calls, which the passes make many times over a stage, some of them once per
-	 * name, and thrown away by {@link #insertClosings}, the one pass that moves a token, and by
-	 * any edit that changes how many breaks a token holds, which none does today. Every other
-	 * edit leaves the line breaks where they were, which the blanking goes out of its way to do.
-	 * That is not this table's rule either, it is the unit's: a break lost anywhere would move
-	 * every line after it away from the one the expander is asked about, and no pass would have
-	 * a way to notice.
+	 * name, and thrown away by {@link #insertTokens} and {@link #insertClosings}, the two that
+	 * move a token, and by any edit that changes how many breaks a token holds, which none does
+	 * today. Every other edit leaves the line breaks where they were, which the blanking goes out
+	 * of its way to do. That is not this table's rule either, it is the unit's: a break lost
+	 * anywhere would move every line after it away from the one the expander is asked about, and
+	 * no pass would have a way to notice.
 	 */
 	int[] lineNumbers() {
 		if (this.lineTable != null) {
@@ -447,7 +454,16 @@ final class TokenStream implements Iterable<Token> {
 		return start;
 	}
 
-	/** The semicolon closing this statement, or -1 if a brace opens first or none is found. */
+	/**
+	 * The semicolon closing this statement, or -1 if a brace opens first or none is found.
+	 * <p>
+	 * Also -1 where a bracket closes that the scan never opened, which is a token asked about from
+	 * inside a parameter list or an argument list: whatever statement holds it ends past that
+	 * bracket, where this walk cannot tell its semicolon from anybody else's. Walking on would meet
+	 * no brace and no semicolon at depth nought until some later {@code for} header opened a
+	 * parenthesis, so it would answer that header's first semicolon, or read its whole budget for
+	 * nothing where there is none, and every parameter of every function is asked about.
+	 */
 	int statementEnd(int index) {
 		int depth = 0;
 		int last = Math.min(this.tokens.size(), index + MAX_STATEMENT_TOKENS);
@@ -463,6 +479,9 @@ final class TokenStream implements Iterable<Token> {
 				depth++;
 			} else if (text.equals(")") || text.equals("]")) {
 				depth--;
+				if (depth < 0) {
+					return -1;
+				}
 			} else if (depth == 0 && text.equals("{")) {
 				return -1;
 			} else if (depth == 0 && text.equals(";")) {

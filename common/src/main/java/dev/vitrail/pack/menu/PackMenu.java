@@ -159,6 +159,13 @@ public final class PackMenu {
 		// main screen names pours out again on purpose: the reference fills its leftover list
 		// only after its main screen is built, so those names dump twice there, and a pack that
 		// laid its columns out against that must keep its shape here.
+		//
+		// The order is the pack's and not the reference's. Iris lists every switch and then every
+		// value, each half in the order of a HashMap keyed by name (OptionMenuContainer.java:36-37,
+		// OptionSet.java:39-40), which is whatever that map's growth leaves behind as it is merged
+		// file after file along the include graph (ShaderPackOptions.java:28-43). This index has no
+		// include graph to replay that with. What the difference costs is the order of the cells one
+		// star pours out, never the image, and unlike a hash order it is one a pack author can read.
 		if (!rests.isEmpty()) {
 			List<MenuSlot> spill = new ArrayList<>();
 			for (PackOption declared : index.all()) {

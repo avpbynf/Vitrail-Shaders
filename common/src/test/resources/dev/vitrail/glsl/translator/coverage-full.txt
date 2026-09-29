@@ -1,0 +1,63 @@
+--- coverage-full.fsh (FRAGMENT) ---
+#version 460 core
+#define <engine defines>
+uniform sampler2D colortex0;
+layout(location = 0) out vec4 ofFragData0;
+layout(location = 1) out vec4 ofFragData1;
+layout(location = 2) out vec4 ofFragData2;
+layout(location = 3) out vec4 ofFragData3;
+layout(location = 4) out vec4 ofFragData4;
+layout(location = 5) out vec4 ofFragData5;
+layout(location = 6) out vec4 ofFragData6;
+layout(location = 7) out vec4 ofFragData7;
+void ofOrderOutputs() { ofFragData0; ofFragData1; ofFragData2; ofFragData3; ofFragData4; ofFragData5; ofFragData6; ofFragData7; }
+
+
+in vec2 texcoord;
+
+
+void main() { ofOrderOutputs();
+	vec4 c = textureLod(colortex0, texcoord, 0.0);
+	ofFragData0 = c;
+	ofFragData1 = c;
+	ofFragData2 = c;
+	ofFragData3 = c;
+	ofFragData4 = c;
+	ofFragData5 = c;
+	ofFragData6 = c;
+	ofFragData7 = c;
+}
+--- notes ---
+fragmentOutputs = 8
+dynamicFragData = 0
+uniformConflicts = 0
+shadowCalls = 0
+unwrappedShadow = 0
+strippedExtensions = 0
+depthEpilogue = 0
+alphaEpilogue = 0
+coverage = 0
+depthLookups = 0
+parameterLookups = 0
+pinnedLookups = 1
+unpinnedParameterLookups = 0
+fragCoordZ = 0
+fragCoordXyz = 0
+fragCoordUnhandled = 0
+fragDepthWrites = 0
+fragDepthUnhandled = 0
+conflictNames = []
+comparedSamplers = []
+hardwareCompared = []
+retypedSamplers = []
+storageBlocks = []
+volumeLookups = 0
+volumesLeftAlone = 0
+trigCalls = 0
+gameTextureMatrix = 0
+gameModelView = 0
+--- drawBuffers ---
+[]
+--- block ---
+--- samplers ---
+sampler2D colortex0

@@ -1,0 +1,97 @@
+--- uniform-lifting.fsh (FRAGMENT) ---
+#version 460 core
+#define <engine defines>
+layout(std140) uniform OfGlobals {
+	float frameTimeCounter;
+	int frameCounter;
+	int isEyeInWater;
+	int entityId;
+	vec3 cameraPosition;
+	vec2 resolution[2];
+	mat4 gbufferModelView;
+	mat4 gbufferProjection;
+	ivec2 atlasSize;
+	float conflict;
+	vec4 entityColor;
+	float multiline;
+	float second;
+};
+uniform sampler2D colortex0;
+uniform sampler2D colortex1;
+layout(location = 0) out vec4 ofFragData0;
+void ofOrderOutputs() { ofFragData0; }
+
+
+
+
+
+
+
+
+
+
+
+#ifdef HAS_FOG
+uniform float fogDensity; // @dead
+#else
+float fogDensity = 0.5;
+#endif
+
+
+
+
+in vec2 texcoord;
+
+void main() { ofOrderOutputs();
+	vec4 c = textureLod(colortex0, texcoord, 0.0) + textureLod(colortex1, texcoord, 0.0);
+	float f = frameTimeCounter + float(frameCounter + isEyeInWater + entityId) + multiline + second;
+	ofFragData0 = c * f * fogDensity + entityColor + vec4(cameraPosition, float(atlasSize.x));
+}
+--- notes ---
+fragmentOutputs = 1
+dynamicFragData = 0
+uniformConflicts = 1
+shadowCalls = 0
+unwrappedShadow = 0
+strippedExtensions = 0
+depthEpilogue = 0
+alphaEpilogue = 0
+coverage = 0
+depthLookups = 0
+parameterLookups = 0
+pinnedLookups = 2
+unpinnedParameterLookups = 0
+fragCoordZ = 0
+fragCoordXyz = 0
+fragCoordUnhandled = 0
+fragDepthWrites = 0
+fragDepthUnhandled = 0
+conflictNames = [conflict]
+comparedSamplers = []
+hardwareCompared = []
+retypedSamplers = []
+storageBlocks = []
+volumeLookups = 0
+volumesLeftAlone = 0
+trigCalls = 0
+gameTextureMatrix = 0
+gameModelView = 0
+--- drawBuffers ---
+[]
+--- block ---
+float frameTimeCounter
+int frameCounter
+int isEyeInWater
+int entityId
+vec3 cameraPosition
+vec2 resolution[2]
+mat4 gbufferModelView
+mat4 gbufferProjection
+ivec2 atlasSize
+float conflict
+vec4 entityColor
+float multiline
+float second
+--- samplers ---
+sampler2D colortex0
+sampler2D colortex1

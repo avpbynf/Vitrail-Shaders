@@ -116,6 +116,19 @@ public final class StorageImages implements AutoCloseable {
 	private volatile Map<String, Bound> bindings = Map.of();
 	private volatile Map<String, Allocated> imagesByName = Map.of();
 	private final Map<String, Bound> typedBindings = new ConcurrentHashMap<>();
+
+	/**
+	 * Whether {@link #allocated} holds an image {@link #clearMarked} empties, and one
+	 * {@link #reanchor} moves, settled in {@link #rebind} with the maps above.
+	 * <p>
+	 * Both are asked of every pack, once a frame for the clear and once a block crossed for the move,
+	 * and most packs have nothing under either. What the answer spares is not the walk but what
+	 * stood in front of it: two device-wide fences recorded around a loop that records nothing, each
+	 * of them a Metal wait on a Mac, every frame of a pack with no custom image at all.
+	 */
+	private boolean clears;
+	private boolean moves;
+
 	private int lastWidth;
 	private int lastHeight;
 	private boolean laidOut;
@@ -202,6 +215,8 @@ public final class StorageImages implements AutoCloseable {
 	private void rebind() {
 		Map<String, Bound> bound = new HashMap<>();
 		Map<String, Allocated> named = new HashMap<>();
+		boolean clearing = false;
+		boolean moving = false;
 		for (Allocated image : this.allocated) {
 			boolean integer = image.declared.internalFormat().used().integer();
 			bound.putIfAbsent(image.declared.name(), new Bound(image.view, true, integer));
@@ -209,11 +224,17 @@ public final class StorageImages implements AutoCloseable {
 					bound.putIfAbsent(sampler, new Bound(image.view, false, integer)));
 			named.putIfAbsent(image.declared.name(), image);
 			image.declared.sampler().ifPresent(sampler -> named.putIfAbsent(sampler, image));
+			clearing |= image.declared.clear();
+			// The scratch and not movable(): a volume whose scratch was refused is one reanchor
+			// skips, so it is not a reason to fence the device either.
+			moving |= image.scratch != 0L;
 		}
 
 		this.bindings = Map.copyOf(bound);
 		this.imagesByName = Map.copyOf(named);
 		this.typedBindings.clear();
+		this.clears = clearing;
+		this.moves = moving;
 	}
 
 	/**
@@ -252,9 +273,16 @@ public final class StorageImages implements AutoCloseable {
 		// Everything or nothing: a refusal halfway through gives back what was allocated, so the
 		// next screen size the colour targets try again at starts from the first image rather
 		// than skipping the one that failed as already dealt with.
+		//
+		// An Error takes the same road as a RuntimeException. LWJGL raises a native
+		// OutOfMemoryError from its stack and its allocators, and the colour targets catch only
+		// the RuntimeException, so a half-made set would otherwise stay standing for whatever
+		// catches the Error further out. The road only queues the destructions, clears the list
+		// and copies it into a map, with no call into the driver, so it does not replace the
+		// failure it is handling, and what is rethrown is the throwable that was caught.
 		try {
 			allocate(vulkan, first, resized, screenWidth, screenHeight);
-		} catch (RuntimeException e) {
+		} catch (RuntimeException | Error e) {
 			this.allocated.forEach(image -> image.destroy(vulkan));
 			this.allocated.clear();
 			this.laidOut = false;
@@ -354,8 +382,18 @@ public final class StorageImages implements AutoCloseable {
 	 * Empties every image the pack asked to clear, which Complementary's voxel volume is. Called
 	 * at the top of the shadow stage, before geometry writes, matching Iris clearing custom images
 	 * before the shadow map is drawn.
+	 * <p>
+	 * Nothing at all is recorded where no image is marked, the pass included. No caller wants the
+	 * pass ended for its own sake: a pass still open here belongs to a {@code RenderPass} object that
+	 * will close it itself, a geometry hold's being the one that outlives its draws, and ending it
+	 * underneath that object is a crash at that close rather than a service. {@code PackCompute}
+	 * flushes the hold before it ends a pass for that reason.
 	 */
 	public void clearMarked(CommandEncoder encoder) {
+		if (!this.clears) {
+			return;
+		}
+
 		GpuRecording.endPass(encoder);
 		VkCommandBuffer commands = commands(encoder);
 		if (commands == null) {
@@ -470,7 +508,8 @@ public final class StorageImages implements AutoCloseable {
 	 * same frame, and a stale identity there blocks light where an emptied one would leak it.
 	 */
 	public void reanchor(CommandEncoder encoder, int dx, int dy, int dz) {
-		if (dx == 0 && dy == 0 && dz == 0) {
+		// A step with no volume to move is left before the pass and the fences, as clearMarked is.
+		if ((dx == 0 && dy == 0 && dz == 0) || !this.moves) {
 			return;
 		}
 
@@ -727,6 +766,8 @@ public final class StorageImages implements AutoCloseable {
 		this.bindings = Map.of();
 		this.imagesByName = Map.of();
 		this.typedBindings.clear();
+		this.clears = false;
+		this.moves = false;
 		this.lastWidth = 0;
 		this.lastHeight = 0;
 		this.laidOut = false;

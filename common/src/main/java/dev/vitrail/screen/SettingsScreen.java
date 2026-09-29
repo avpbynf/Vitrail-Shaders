@@ -30,12 +30,14 @@ import java.io.InputStream;
 import java.io.IOException;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.time.Duration;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.Deque;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -1031,8 +1033,24 @@ public final class SettingsScreen extends Screen implements PackHost, ScreenHost
 				.withStyle(ChatFormatting.ITALIC, ChatFormatting.YELLOW));
 	}
 
-	/** Copies a zip, or a whole directory, into the pack folder without overwriting what is there. */
-	private static void copyInto(Path directory, Path pack) throws IOException {
+	/**
+	 * Copies a zip, or a whole directory, into the pack folder without overwriting what is there.
+	 * <p>
+	 * <b>A directory arrives whole or not at all.</b> It is copied under a name of its own beside
+	 * where it goes, then renamed into place once every file is there, and the copy is removed if
+	 * any file of it fails. Copied straight into place, a drop that failed half way left a pack in
+	 * the list with files missing from it, and every drop after that met its name and was told the
+	 * pack already existed, so the player could not try again without finding the folder on disk.
+	 * <p>
+	 * <b>A link inside it is copied as a link</b>, and not as whatever it points at. Followed, a
+	 * link out of the folder became a plain file of the pack, and the check that refuses a folder
+	 * pack's links out of itself had nothing left to see. The folder dropped is the one exception:
+	 * that is what the player chose, so it is followed to wherever it is.
+	 * <p>
+	 * A zip needs none of that: the one file is copied by the platform, which removes what it wrote
+	 * when the copy fails.
+	 */
+	static void copyInto(Path directory, Path pack) throws IOException {
 		Files.createDirectories(directory);
 		Path target = directory.resolve(name(pack));
 		if (Files.exists(target)) {
@@ -1045,15 +1063,49 @@ public final class SettingsScreen extends Screen implements PackHost, ScreenHost
 			return;
 		}
 
-		try (Stream<Path> tree = Files.walk(pack)) {
-			for (Path entry : tree.toList()) {
-				Path to = target.resolve(pack.relativize(entry).toString());
-				if (Files.isDirectory(entry)) {
-					Files.createDirectories(to);
-				} else {
-					Files.createDirectories(to.getParent());
-					Files.copy(entry, to, StandardCopyOption.COPY_ATTRIBUTES);
+		// In the same folder so that the last step is a rename, under a dot so that a file browser
+		// hides it, and in the one shape the pack list leaves out. What a copy cut short by a crash
+		// left under that name is cleared first, as nothing else ever writes there.
+		Path staging = PackLoader.staging(directory, name(pack));
+		Path source = pack.toRealPath();
+		deleteTree(staging);
+		try {
+			try (Stream<Path> tree = Files.walk(source)) {
+				for (Path entry : tree.toList()) {
+					Path to = staging.resolve(source.relativize(entry).toString());
+					if (Files.isDirectory(entry, LinkOption.NOFOLLOW_LINKS)) {
+						Files.createDirectories(to);
+					} else {
+						Files.createDirectories(to.getParent());
+						Files.copy(entry, to, StandardCopyOption.COPY_ATTRIBUTES,
+								LinkOption.NOFOLLOW_LINKS);
+					}
 				}
+			}
+
+			// A rename within one folder, which is atomic wherever a game directory sits. Asked for
+			// without ATOMIC_MOVE, which lets a rename replace an empty folder that appeared since
+			// the check above, where this refuses it as the check does.
+			Files.move(staging, target);
+		} catch (IOException | RuntimeException e) {
+			try {
+				deleteTree(staging);
+			} catch (IOException | RuntimeException swallowed) {
+				e.addSuppressed(swallowed);
+			}
+			throw e;
+		}
+	}
+
+	/** Removes a tree, links included and never followed, or does nothing where there is none. */
+	private static void deleteTree(Path root) throws IOException {
+		if (!Files.exists(root, LinkOption.NOFOLLOW_LINKS)) {
+			return;
+		}
+
+		try (Stream<Path> tree = Files.walk(root)) {
+			for (Path entry : tree.sorted(Comparator.reverseOrder()).toList()) {
+				Files.delete(entry);
 			}
 		}
 	}

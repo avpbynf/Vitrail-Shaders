@@ -51,11 +51,12 @@ a program has drawn once there is no legacy GLSL behind it.
 
 Where the pauses come from is worth knowing, because "once" is not the same as "at selection". The
 chain and the programs that draw the world are translated at the load. The sky, the entities and
-the other families are translated and compiled on a background worker while you play, so a first
-frame waits on one of those only where it outruns that work. And **changing dimension is a full
-reload**, because a dimension directory replaces the root rather than layering over it: the whole
-pack is read, translated and its colour targets allocated again. That is the hitch at the portal,
-and the log names it as it happens.
+the other families are read, translated and compiled on a background worker while you play, so a
+first frame waits on one of those only where it outruns the compile, and a family the worker has
+not read is drawn by the game instead. And **changing dimension is a full reload**, because a
+dimension directory replaces the root rather than layering over it: the whole pack is read,
+translated and its colour targets allocated again. That is the hitch at the portal, and the log
+names it as it happens.
 
 That choice has consequences worth knowing about, because they explain most of what you will
 observe:
@@ -65,10 +66,11 @@ observe:
   once. Until the composites and the terrain are ready the chain draws nothing, and neither does the
   world: the HUD stays up, and the Vitrail mark pulses in the top-left corner with "Compiling
   shaders..." beside it. The leftover families then compile in the background while you play,
-  the mark still pulsing, and a first draw that outruns that work compiles on the spot. When
-  everything is in, the mark stands still, says so, and the corner fades back to the game. The
-  same wait comes back for a moment after every resource reload. The Compile Notice switch on
-  Vitrail's page of the video settings hides that corner; the wait itself does not change.
+  the mark still pulsing. A family the worker has read and not yet compiled is compiled on the spot
+  by its first draw, and one it has not read is drawn by the game. When everything is in, the mark
+  stands still, says so, and the corner fades back to the game. The same wait comes back for a
+  moment after every resource reload. The Compile Notice switch on Vitrail's page of the video
+  settings hides that corner; the wait itself does not change.
 - **A pack that cannot be translated fails loudly**, not as a corrupt image twenty minutes later.
   When Vitrail refuses something, the log names it.
 - **Uniform and sampler binding is decided up front**, so a pack that asks for something the
@@ -82,11 +84,13 @@ families still come from the game, already tone mapped, and are carried across b
 **That line is the authority.** Anything a page here says about scope is written to agree with it,
 never to replace it.
 
-Two things about that line rather than one, since a reader who does not find it should know why.
-It names what still comes from the *game*, so the families that do go through the pack are the ones
-it does not name. And it does not always appear: a place whose plan has no seed in it, or a run
-with `seed=off` in `vitrail/options.txt`, says something else instead, because there the targets
-simply keep their clear colour.
+Two things about that line rather than one, since a reader who does not find it should know why. It
+names what still comes from the *game* because a switch is off, and the beacon beam and the
+lightning, so the families that do go through the pack are the ones it does not name, but for a
+family the pack-load worker could not read: that one is the game's too, and the log names it in an
+error line of its own and the settings screen in a message. And it does not always appear: a place
+whose plan has no seed in it, or a run with `seed=off` in `vitrail/options.txt`, says something
+else instead, because there the targets simply keep their clear colour.
 
 The visible consequence of a family not going through the pack is always the same, and it is
 worth recognising: that geometry is composited in flat, carrying the game's own lighting,

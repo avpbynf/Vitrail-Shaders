@@ -109,7 +109,7 @@ public final class DhLods {
 	private static Field renderProxyField;
 	private static Method deferTransparentMethod;
 
-	/** Whether that switch has been thrown, which sticks until {@link #restore} lets go of it. */
+	/** Whether that switch has been thrown, which sticks until {@link #undefer} lets go of it. */
 	private static boolean deferred;
 
 	/**
@@ -274,7 +274,8 @@ public final class DhLods {
 			// the deferred stage would be recorded before that stage has run, and the depth taken
 			// as dhDepthTex1 would already carry the water. Iris throws the same switch for the
 			// same reason (compat/dh/LodRendererEvents.java:92). Null while DH is still starting,
-			// and then nothing is substituted this frame either: the two go together or not at all.
+			// and then nothing is substituted this frame either. The reverse does not hold, for the
+			// reason undefer gives.
 			if (!deferred && !defer()) {
 				return;
 			}
@@ -328,6 +329,33 @@ public final class DhLods {
 				+ "which is where the pack's own dh_water pass stands");
 
 		return true;
+	}
+
+	/**
+	 * Puts that switch back where DH keeps it without a consumer, if this engine threw it. Iris
+	 * clears the same switch when it stops overriding ({@code compat/dh/LodRendererEvents.java:92}
+	 * setting it from a live condition).
+	 * <p>
+	 * A debt of its own rather than a part of the renderer's: {@link #install} throws it before it
+	 * reads that renderer, so it stands with nothing substituted whenever a pack is released while
+	 * DH has bound no renderer yet, or after the read of it failed. Let go of before the call
+	 * rather than after it: a switch that throws on the way back, or a proxy DH no longer
+	 * publishes, is tried once and not by every hand-back after.
+	 */
+	private static void undefer() {
+		if (!deferred) {
+			return;
+		}
+
+		deferred = false;
+		try {
+			Object proxy = renderProxyField.get(null);
+			if (proxy != null) {
+				deferTransparentMethod.invoke(proxy, false);
+			}
+		} catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
+			Vitrail.logger().debug("Distant Horizons' deferred water switch cannot be put back", e);
+		}
 	}
 
 	/**
@@ -605,6 +633,12 @@ public final class DhLods {
 	public static void handBack() {
 		if (substitute != null && original != null) {
 			restore();
+		} else {
+			// No renderer read, so none to hand back, and the switch may stand all the same. Left
+			// alone, DH would go on drawing its water in its deferred branch alone, which never
+			// applies its image to the game's (core/render/renderer/LodRenderer.renderTerrain), so
+			// with no pack to read it the far water would be gone for the rest of the session.
+			undefer();
 		}
 	}
 
@@ -622,19 +656,8 @@ public final class DhLods {
 		}
 
 		// And its own frame order with it, so a DH handed back draws exactly as it does where this
-		// engine does not stand in the way. Iris clears the same switch when it stops overriding
-		// (compat/dh/LodRendererEvents.java:92 setting it from a live condition).
-		if (deferred) {
-			deferred = false;
-			try {
-				Object proxy = renderProxyField.get(null);
-				if (proxy != null) {
-					deferTransparentMethod.invoke(proxy, false);
-				}
-			} catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
-				Vitrail.logger().debug("Distant Horizons' deferred water switch cannot be put back", e);
-			}
-		}
+		// engine does not stand in the way.
+		undefer();
 
 		// And its own two post passes, which are worth having again the moment their image is the
 		// one on screen. Handed back to the PLAYER rather than set true: what the menu says is his,

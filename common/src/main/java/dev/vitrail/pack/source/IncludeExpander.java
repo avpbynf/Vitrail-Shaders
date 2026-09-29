@@ -254,6 +254,11 @@ public final class IncludeExpander {
 			}
 
 			String line = logical.text();
+			if (plain(line) || (!conditions.active() && deadText(line))) {
+				state.emit(logical.physical(), conditions.active());
+				continue;
+			}
+
 			if (state.inBlockComment && !INCLUDE.matcher(line).matches()) {
 				String settled = conditions.active()
 						? OptionRewriter.apply(line, this.settings.chosen(), this.settings.scale())
@@ -388,6 +393,14 @@ public final class IncludeExpander {
 		List<String> physical = new ArrayList<>();
 		int number = 1;
 		for (String line : lines) {
+			// The line that joins nothing, which is nearly all of them, needs no builder and no list to
+			// grow: it is its own text and its own physical line.
+			if (physical.isEmpty() && !line.endsWith("\\")) {
+				logical.add(new Logical(line, number, List.of(line)));
+				number++;
+				continue;
+			}
+
 			physical.add(line);
 			if (line.endsWith("\\")) {
 				joined.append(line, 0, line.length() - 1);
@@ -406,6 +419,67 @@ public final class IncludeExpander {
 		}
 
 		return logical;
+	}
+
+	/**
+	 * Whether no reader below can touch this line, so that it is written out as it stands, live or dead
+	 * as the stack says, whatever the block comment is doing.
+	 * <p>
+	 * Every directive this reader recognises opens with a hash, and the one other line a chosen setting
+	 * rewrites is a constant, whose declaration carries the word {@code const}: a line with neither is
+	 * text. Most lines of a shader are, and the patterns below would each refuse it in turn. What breaks
+	 * if a directive, or {@link OptionRewriter}, is ever taught a shape with neither of the two: it is
+	 * written out untouched here, which is why {@code IncludeExpanderFastPathTest} pins both premises.
+	 */
+	static boolean plain(String line) {
+		return line.indexOf('#') < 0 && !line.contains("const");
+	}
+
+	/**
+	 * Whether a line on a branch that is off is text and nothing else. Off, all that is read of a line
+	 * is whether it opens, continues or closes a group, includes a file, or is an {@code #error}: every
+	 * other line, a {@code #define} among them, is written out as it stands. Those eight words are the
+	 * whole of it, so a line is text when its first word after the hash is none of them.
+	 * <p>
+	 * The word is the longest run of ASCII letters, digits and underscores, which is where the
+	 * patterns' word boundary ends it, and the blanks are the ones {@code \s} means and not the ones
+	 * {@link Character#isWhitespace} does. A word that only begins like one of the eight, as
+	 * {@code #elsewhere} does, is not one of them. Anything this cannot place goes the long way, so an
+	 * answer of false costs time and never the text.
+	 */
+	static boolean deadText(String line) {
+		int at = 0;
+		int length = line.length();
+		while (at < length && isBlank(line.charAt(at))) {
+			at++;
+		}
+
+		if (at == length || line.charAt(at) != '#') {
+			return true;
+		}
+
+		at++;
+		while (at < length && isBlank(line.charAt(at))) {
+			at++;
+		}
+
+		int start = at;
+		while (at < length && isWordCharacter(line.charAt(at))) {
+			at++;
+		}
+
+		return switch (line.substring(start, at)) {
+			case "if", "ifdef", "ifndef", "elif", "else", "endif", "error", "include" -> false;
+			default -> true;
+		};
+	}
+
+	private static boolean isBlank(char c) {
+		return c == ' ' || c == '\t' || c == '\n' || c == '\u000B' || c == '\f' || c == '\r';
+	}
+
+	private static boolean isWordCharacter(char c) {
+		return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_';
 	}
 
 	/**
@@ -800,6 +874,16 @@ public final class IncludeExpander {
 		 * continued that way hides the line under it too.
 		 */
 		private void emit(List<String> lines, boolean taken) {
+			// One physical line has nothing to join. A backslash it ends on is left in for the walk, since no
+			// comment pair has a backslash in it.
+			if (lines.size() == 1) {
+				String only = lines.get(0);
+				add(only, taken);
+				this.inBlockComment = BlockComments.openAfter(only, this.inBlockComment);
+
+				return;
+			}
+
 			StringBuilder joined = new StringBuilder();
 			for (String line : lines) {
 				add(line, taken);

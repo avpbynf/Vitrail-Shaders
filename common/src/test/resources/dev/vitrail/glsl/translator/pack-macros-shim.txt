@@ -1,0 +1,68 @@
+--- pack-macros-shim.vsh (VERTEX) ---
+#version 460 core
+#define <engine defines>
+layout(std140) uniform OfGlobals {
+	vec4 of_DepthConv;
+};
+uniform sampler2D ofTexture;
+invariant gl_Position;
+float ofReducedSin(float ofX) { float ofK = floor(ofX * 0.15915494); float ofR = ofX - ofK * 6.28125 - ofK * 1.9353072e-3; ofR -= 6.2831855 * step(3.1415927, ofR); float ofS = sign(ofR); float ofA = 1.5707964 - abs(abs(ofR) - 1.5707964); float ofZ = ofA * ofA; return clamp(ofS * ofA * (1.0 + ofZ * (-1.6666654611e-1 + ofZ * (8.3321608736e-3 + ofZ * (-1.9515295891e-4)))), -1.0, 1.0); }
+float ofReducedCos(float ofX) { return ofReducedSin(ofX + 1.5707964); }
+vec2 ofReducedSin(vec2 ofX) { vec2 ofK = floor(ofX * 0.15915494); vec2 ofR = ofX - ofK * 6.28125 - ofK * 1.9353072e-3; ofR -= 6.2831855 * step(3.1415927, ofR); vec2 ofS = sign(ofR); vec2 ofA = 1.5707964 - abs(abs(ofR) - 1.5707964); vec2 ofZ = ofA * ofA; return clamp(ofS * ofA * (1.0 + ofZ * (-1.6666654611e-1 + ofZ * (8.3321608736e-3 + ofZ * (-1.9515295891e-4)))), -1.0, 1.0); }
+vec2 ofReducedCos(vec2 ofX) { return ofReducedSin(ofX + 1.5707964); }
+vec3 ofReducedSin(vec3 ofX) { vec3 ofK = floor(ofX * 0.15915494); vec3 ofR = ofX - ofK * 6.28125 - ofK * 1.9353072e-3; ofR -= 6.2831855 * step(3.1415927, ofR); vec3 ofS = sign(ofR); vec3 ofA = 1.5707964 - abs(abs(ofR) - 1.5707964); vec3 ofZ = ofA * ofA; return clamp(ofS * ofA * (1.0 + ofZ * (-1.6666654611e-1 + ofZ * (8.3321608736e-3 + ofZ * (-1.9515295891e-4)))), -1.0, 1.0); }
+vec3 ofReducedCos(vec3 ofX) { return ofReducedSin(ofX + 1.5707964); }
+vec4 ofReducedSin(vec4 ofX) { vec4 ofK = floor(ofX * 0.15915494); vec4 ofR = ofX - ofK * 6.28125 - ofK * 1.9353072e-3; ofR -= 6.2831855 * step(3.1415927, ofR); vec4 ofS = sign(ofR); vec4 ofA = 1.5707964 - abs(abs(ofR) - 1.5707964); vec4 ofZ = ofA * ofA; return clamp(ofS * ofA * (1.0 + ofZ * (-1.6666654611e-1 + ofZ * (8.3321608736e-3 + ofZ * (-1.9515295891e-4)))), -1.0, 1.0); }
+vec4 ofReducedCos(vec4 ofX) { return ofReducedSin(ofX + 1.5707964); }
+
+
+#define texture2D ofTexture
+#define gl_Vertex vec4(position, 1.0)
+#define ROTATE(texture, angle) mat2(ofReducedCos(texture), ofReducedSin(angle))
+#define SAMPLE_PREFIX textureGrad(ofTexture,
+
+
+in vec3 position;
+out vec2 uv;
+
+void ofPackMain() {
+	vec2 r = ROTATE(1.0, 2.0) * vec2(1.0);
+	uv = texture2D(ofTexture, r).xy;
+	gl_Position = gl_Vertex;
+}
+void main() { ofPackMain(); gl_Position.z = of_DepthConv.x * gl_Position.z + of_DepthConv.y * gl_Position.w; }
+--- notes ---
+fragmentOutputs = 0
+dynamicFragData = 0
+uniformConflicts = 0
+shadowCalls = 0
+unwrappedShadow = 0
+strippedExtensions = 0
+depthEpilogue = 1
+alphaEpilogue = 0
+coverage = 0
+depthLookups = 0
+parameterLookups = 0
+pinnedLookups = 0
+unpinnedParameterLookups = 0
+fragCoordZ = 0
+fragCoordXyz = 0
+fragCoordUnhandled = 0
+fragDepthWrites = 0
+fragDepthUnhandled = 0
+conflictNames = []
+comparedSamplers = []
+hardwareCompared = []
+retypedSamplers = []
+storageBlocks = []
+volumeLookups = 0
+volumesLeftAlone = 0
+trigCalls = 2
+gameTextureMatrix = 0
+gameModelView = 0
+--- drawBuffers ---
+[]
+--- block ---
+vec4 of_DepthConv
+--- samplers ---
+sampler2D ofTexture

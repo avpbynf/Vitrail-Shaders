@@ -7,6 +7,8 @@ import dev.vitrail.pack.texture.CustomStorage;
 import dev.vitrail.pack.texture.VolumeAtlas;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -82,6 +84,20 @@ public final class ProgramTranslator {
 	public record TranslatedProgram(Map<ProgramStage, TranslatedUnit> stages,
 			List<TranslatedUnit.Uniform> uniforms, List<TranslatedUnit.Uniform> samplers,
 			Set<String> sampled, Map<String, String> synthesized, VertexInputs inputs) {
+
+		public TranslatedProgram {
+			// Kept in order rather than Map.copyOf, whose order is drawn afresh at every launch, and
+			// both maps are walked: the bind group takes its storage blocks in the order the stages
+			// are met, and the codec writes both to disk in theirs. The stages go by the enum, so a
+			// program read back from a blob comes out in the order a translated one does whatever
+			// order the blob was written in, and the map is made empty and filled because EnumMap's
+			// copying constructor refuses an empty map of any other kind. The synthesised names keep
+			// the order the stages declared them in.
+			Map<ProgramStage, TranslatedUnit> ordered = new EnumMap<>(ProgramStage.class);
+			ordered.putAll(stages);
+			stages = Collections.unmodifiableMap(ordered);
+			synthesized = Collections.unmodifiableMap(new LinkedHashMap<>(synthesized));
+		}
 	}
 
 	/**
@@ -330,8 +346,8 @@ public final class ProgramTranslator {
 					memoryQualifiers, imageFormats));
 		});
 
-		return new TranslatedProgram(Map.copyOf(translated), block, bound, Set.copyOf(sampled),
-				Map.copyOf(synthesized), inputs);
+		return new TranslatedProgram(translated, block, bound, Set.copyOf(sampled),
+				synthesized, inputs);
 	}
 
 	/**

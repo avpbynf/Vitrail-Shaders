@@ -1,0 +1,56 @@
+--- alpha-cutout.fsh (FRAGMENT) ---
+#version 460 core
+#define <engine defines>
+uniform sampler2D ofTexture;
+layout(location = 0) out vec4 ofFragData0;
+layout(location = 1) out vec4 ofFragData1;
+layout(location = 2) out float ofCoverage;
+void ofOrderOutputs() { ofFragData0; ofFragData1; ofCoverage; }
+
+
+
+in vec2 texcoord;
+in vec4 glcolor;
+
+/* RENDERTARGETS: 0,1 */
+
+void ofPackMain() {
+	vec4 colour = texture(ofTexture, texcoord) * glcolor;
+	ofFragData1 = vec4(0.5);
+	ofFragData0 = colour;
+}
+void main() { ofOrderOutputs(); ofPackMain(); if (!(ofFragData0.a > 0.5)) { discard; } ofCoverage = gl_FragCoord.z; }
+--- notes ---
+fragmentOutputs = 2
+dynamicFragData = 0
+uniformConflicts = 0
+shadowCalls = 0
+unwrappedShadow = 0
+strippedExtensions = 0
+depthEpilogue = 0
+alphaEpilogue = 1
+coverage = 1
+depthLookups = 0
+parameterLookups = 0
+pinnedLookups = 0
+unpinnedParameterLookups = 0
+fragCoordZ = 0
+fragCoordXyz = 0
+fragCoordUnhandled = 0
+fragDepthWrites = 0
+fragDepthUnhandled = 0
+conflictNames = []
+comparedSamplers = []
+hardwareCompared = []
+retypedSamplers = []
+storageBlocks = []
+volumeLookups = 0
+volumesLeftAlone = 0
+trigCalls = 0
+gameTextureMatrix = 0
+gameModelView = 0
+--- drawBuffers ---
+[0, 1]
+--- block ---
+--- samplers ---
+sampler2D ofTexture

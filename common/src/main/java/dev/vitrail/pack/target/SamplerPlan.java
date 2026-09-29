@@ -662,7 +662,7 @@ public final class SamplerPlan {
 		// program a compute hangs off may draw nothing and be in no running order either: Pegasus
 		// ships prepare_a and no prepare.fsh, and a walk looking for that name would again run to
 		// the end of the stage. This is the moment the chain dispatches such a compute at
-		// (PackChain.standaloneOf places it before the first pass that does not sort ahead of it),
+		// (FrameCuts.standaloneOf places it before the first pass that does not sort ahead of it),
 		// and the two have to be one answer.
 		Set<String> abandoned = new LinkedHashSet<>();
 		for (String earlier : plan.running()) {

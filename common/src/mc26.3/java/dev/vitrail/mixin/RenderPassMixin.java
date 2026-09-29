@@ -3,6 +3,7 @@ package dev.vitrail.mixin;
 import dev.vitrail.render.GeometryHold;
 import dev.vitrail.render.GraphicsApi;
 import dev.vitrail.render.ParticleDraw;
+import dev.vitrail.render.timing.FrameCensus;
 
 import com.mojang.renderpearl.api.commands.RenderPass;
 import com.mojang.renderpearl.api.pipeline.CompiledRenderPipeline;
@@ -41,20 +42,50 @@ public abstract class RenderPassMixin {
 		}
 	}
 
+	/**
+	 * Swaps the particle pipeline, and counts the bind for {@link FrameCensus}: this is the one place
+	 * every pipeline set on any pass goes through, the game's and Sodium's and this engine's, and what
+	 * each exit hands back is what the pass really holds. The family is read off the description, and
+	 * a compiled pipeline nothing described is somebody else's.
+	 */
 	@ModifyVariable(method = "setPipeline", at = @At("HEAD"), argsOnly = true, require = 1)
 	private CompiledRenderPipeline vitrail$particlePipeline(CompiledRenderPipeline compiled) {
 		RenderPipeline game = GraphicsApi.descriptionOf(compiled);
 		if (game == null) {
+			FrameCensus.bind(this, compiled, null);
+
 			return compiled;
 		}
 
 		RenderPipeline chosen = ParticleDraw.pipeline((RenderPass) (Object) this, game);
 		if (chosen == game) {
+			FrameCensus.bind(this, compiled, game);
+
 			return compiled;
 		}
 
 		CompiledRenderPipeline ours = GraphicsApi.compiledFor(chosen);
-		return ours == null ? compiled : ours;
+		if (ours == null) {
+			FrameCensus.bind(this, compiled, game);
+
+			return compiled;
+		}
+
+		FrameCensus.bind(this, ours, chosen);
+
+		return ours;
+	}
+
+	/**
+	 * Counts a draw for {@link FrameCensus}, under the family of the pipeline the pass holds. At the
+	 * head of every method that records one and reading none of their arguments, so the handler names
+	 * only the callback. Sodium's terrain draws never come through here: it records them into the
+	 * command buffer itself.
+	 */
+	@Inject(method = {"draw", "drawIndexed", "multiDraw", "multiDrawIndexed", "drawIndirect",
+			"drawIndexedIndirect", "drawMultipleIndexed"}, at = @At("HEAD"), require = 1)
+	private void vitrail$census(CallbackInfo callback) {
+		FrameCensus.draw(this);
 	}
 
 	@Inject(method = "setUniform(Ljava/lang/String;"

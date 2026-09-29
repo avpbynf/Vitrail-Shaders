@@ -113,7 +113,7 @@ public final class TerrainMesh implements ChunkVertexType {
 	 * them raw: of the 3696 {@code uv} rectangles in the block models 26.2 ships, 391 have one axis
 	 * reversed and therefore the opposite handedness. Sodium reflects the winding of some quads as
 	 * well, {@code DefaultFluidRenderer}, and a reflection turns the sign too. None of that reaches
-	 * {@link #handedness}, which measures the corners it is handed; it reaches this constant.
+	 * {@link TerrainGeometry#handedness}, which measures the corners it is handed; it reaches this constant.
 	 * <p>
 	 * The handedness of a rectangle is the product of the signs of its two axes, so a degenerate one
 	 * leaves one factor with no value and this constant assumes it forward. The measurement backs
@@ -121,13 +121,6 @@ public final class TerrainMesh implements ChunkVertexType {
 	 * keep the axis that survives forward, and a model this engine has not seen may not.
 	 */
 	private static final float UNREVERSED_AREA = -1.0F;
-
-	/**
-	 * The squared length under which {@link #orthogonalise} takes a tangent to have had nothing left
-	 * of it once the normal was subtracted, which is Iris's own {@code NormalHelper.EPS} weighed the
-	 * way Iris weighs it, on the square and not on the length.
-	 */
-	private static final float FLATTENED = 1.0E-20F;
 
 	/**
 	 * The seven floats {@link #frame} works in, one array per thread.
@@ -445,7 +438,7 @@ public final class TerrainMesh implements ChunkVertexType {
 		 * the third axis of that frame points, in one word.
 		 * <p>
 		 * <strong>One word and not two, which is Iris's own bargain</strong>: what
-		 * {@link #orthogonalise} leaves is at a right angle to the normal, so once the normal is known
+		 * {@link TerrainGeometry#orthogonalise} leaves is at a right angle to the normal, so once the normal is known
 		 * the tangent is one angle in the normal's plane and one sign. {@link TangentFrame} is where
 		 * the bits are shared out and where that is argued against the reference; the prologue reads
 		 * the word back with text the same class writes.
@@ -580,7 +573,7 @@ public final class TerrainMesh implements ChunkVertexType {
 	 * corners is right for a quad that is not planar either, and it costs the same.
 	 * <p>
 	 * The tangent is the direction the texture's own U axis points in, taken from the two edges and
-	 * their texture coordinates, and then squared up against the normal by {@link #orthogonalise}. It
+	 * their texture coordinates, and then squared up against the normal by {@link TerrainGeometry#orthogonalise}. It
 	 * is what every normal map on the terrain is read through, and handing back a constant instead
 	 * tilts every one of them the same wrong way. Its handedness says which way the
 	 * third axis of that frame goes and is the difference between a bump and a dent.
@@ -602,7 +595,7 @@ public final class TerrainMesh implements ChunkVertexType {
 
 		// The answer for a quad no triangle of which has an area to measure. A triangle that has one
 		// overwrites it below, whether or not it goes on to yield a direction.
-		frame[6] = handedness(UNREVERSED_AREA);
+		frame[6] = TerrainGeometry.handedness(UNREVERSED_AREA);
 
 		// Newell: every edge of the loop contributes, so a quad whose four corners are not in one
 		// plane still answers the plane they are closest to instead of the plane of its first three.
@@ -614,7 +607,7 @@ public final class TerrainMesh implements ChunkVertexType {
 			frame[2] += (current.x - next.x) * (current.y + next.y);
 		}
 
-		normalise(frame, 0);
+		TerrainGeometry.normalise(frame, 0);
 
 		// The second triangle when the first has nothing to say, which is Iris's own retry in
 		// computeTangentForQuad: three corners of a quad can share a texture coordinate while the
@@ -624,83 +617,12 @@ public final class TerrainMesh implements ChunkVertexType {
 		// the sorter's own array, allocated by ChunkVertexEncoder.Vertex.uninitializedQuad.
 		if (!tangent(frame, vertices[0], vertices[1], vertices[2])
 				&& !tangent(frame, vertices[2], vertices[3], vertices[0])) {
-			perpendicular(frame);
+			TerrainGeometry.perpendicular(frame);
 		}
 
-		orthogonalise(frame);
+		TerrainGeometry.orthogonalise(frame);
 
 		return frame;
-	}
-
-	/**
-	 * Takes the normal's own direction out of the tangent, so that what a pack reads is at a right
-	 * angle to {@code gl_Normal} on every quad and not only where the mapping happens to be affine.
-	 * <p>
-	 * <strong>Iris does this to every tangent of the chunk mesh, and to that mesh
-	 * alone</strong>: {@code NormalHelper.packDiamondByte} lines 489 to 510 subtracts
-	 * {@code n * dot(n, tangent)}, and what it stores is an angle in the plane that leaves, which its
-	 * own patched vertex stage turns back into {@code normalize(p.x * t1 + p.y * t2)} of a basis built
-	 * from the normal ({@code SodiumTransformer} lines 191 to 198). That packing is reached through
-	 * {@code NormalHelper.encodeNormalTangent} lines 512 to 520 and through nothing else, and its
-	 * only callers are {@code XHFPTerrainVertex} lines 26 and 132. The entity, text and glyph
-	 * tangents take the other road, {@code NormalHelper.computeTangent} straight into
-	 * {@code NormI8.pack} ({@code NormalHelper.java:246}, {@code :333} and {@code :414}), which
-	 * stores the direction the mapping gave and never projects it onto the normal's plane at all.
-	 * <p>
-	 * A pack reading the terrain under Iris therefore always reads a unit vector exactly
-	 * perpendicular to the normal, and <strong>it is the tangent itself, not the
-	 * bitangent, that carries the defect</strong>: the first column of the frame a normal map is
-	 * read through is {@code at_tangent.xyz}, and the packs that normalise it normalise its length
-	 * and not its direction. A vector leaning towards the normal is still leaning afterwards, and it
-	 * tilts the whole frame with it.
-	 * <p>
-	 * The bitangent is not the argument, and it is worth saying because it looks as though it should
-	 * be. Four packs write {@code cross(at_tangent.xyz, gl_Normal.xyz) * at_tangent.w} word for word,
-	 * measured over the eight, and all four scale what comes out of it to unit length before using
-	 * it - two in a {@code normalize} and two in an {@code inversesqrt(max(dot(b, b), 1e-8))} of
-	 * their own - so none of them depends on its length. Nor does this change its direction: what is
-	 * subtracted is a multiple of the normal, and the normal crossed with itself is nought. What the
-	 * normalising here does is give that cross product a length of one as well, and the handedness
-	 * bit goes on meaning what {@link #handedness} says it means.
-	 * <p>
-	 * <strong>Nothing of that difference is left in the quantisation.</strong> Storing the vector
-	 * itself as three rounded bytes brings the dot product with the normal back at a few thousandths
-	 * rather than at nought, and the work below is then undone by the rounding.
-	 * {@link Extra#TANGENT_FRAME} stores the angle in the plane, which is what Iris stores, so
-	 * what a pack reads is perpendicular to the last bit on both engines and this projection is what
-	 * decides the angle rather than a step on the way to it.
-	 */
-	private static void orthogonalise(float[] frame) {
-		float along = frame[0] * frame[3] + frame[1] * frame[4] + frame[2] * frame[5];
-		frame[3] -= frame[0] * along;
-		frame[4] -= frame[1] * along;
-		frame[5] -= frame[2] * along;
-		if (frame[3] * frame[3] + frame[4] * frame[4] + frame[5] * frame[5] > FLATTENED) {
-			normalise(frame, 3);
-
-			return;
-		}
-
-		basis(frame);
-	}
-
-	/**
-	 * The first axis of Frisvad's basis for the normal already in the frame, which is what Iris
-	 * substitutes when the projection above leaves nothing, {@code NormalHelper.onbFromUnitNormal}
-	 * lines 468 to 479.
-	 * <p>
-	 * Written out rather than reasoned out, because the point of that construction is that it holds
-	 * at both poles without a branch on which axis the normal is nearest. It is not the same axis as
-	 * {@link #perpendicular}'s and the two are not interchangeable: this one is reached with a
-	 * tangent that came out parallel to the normal, where that one is reached with no tangent at all.
-	 */
-	private static void basis(float[] frame) {
-		float side = frame[2] >= 0.0F ? 1.0F : -1.0F;
-		float scale = -1.0F / (side + frame[2]);
-		frame[3] = 1.0F + side * frame[0] * frame[0] * scale;
-		frame[4] = side * frame[0] * frame[1] * scale;
-		frame[5] = -side * frame[0];
-		normalise(frame, 3);
 	}
 
 	/**
@@ -719,7 +641,7 @@ public final class TerrainMesh implements ChunkVertexType {
 	 * the normalise, this tests a sum of components before it.
 	 * <p>
 	 * A quad refused here is retried on its other triangle, and only when that refuses too does the
-	 * caller fall back on {@link #perpendicular}.
+	 * caller fall back on {@link TerrainGeometry#perpendicular}.
 	 * <p>
 	 * <strong>Neither refusal is a decision.</strong> Nothing in the API of 26.2 stands in the way of
 	 * answering as Iris answers, so both are divergences, and the terrain page says what they cost
@@ -743,7 +665,7 @@ public final class TerrainMesh implements ChunkVertexType {
 
 		// Before the direction, because this triangle can fail to yield one and its area is measured
 		// all the same: the sign is the mapping's answer either way, and the fallback below has none.
-		frame[6] = handedness(area);
+		frame[6] = TerrainGeometry.handedness(area);
 
 		float scale = 1.0F / area;
 		frame[3] = ((b.x - a.x) * dv2 - (c.x - a.x) * dv1) * scale;
@@ -759,85 +681,9 @@ public final class TerrainMesh implements ChunkVertexType {
 			return false;
 		}
 
-		normalise(frame, 3);
+		TerrainGeometry.normalise(frame, 3);
 
 		return true;
-	}
-
-	/** Three of those floats to unit length, or to the up axis when there is no length to speak of. */
-	private static void normalise(float[] frame, int at) {
-		float length = (float) Math.sqrt(frame[at] * frame[at] + frame[at + 1] * frame[at + 1]
-				+ frame[at + 2] * frame[at + 2]);
-		if (length < 1.0E-9F) {
-			frame[at] = 0.0F;
-			frame[at + 1] = 1.0F;
-			frame[at + 2] = 0.0F;
-
-			return;
-		}
-
-		frame[at] /= length;
-		frame[at + 1] /= length;
-		frame[at + 2] /= length;
-	}
-
-	/**
-	 * Which way the third axis of the frame turns, which is MINUS the sign of the texture area.
-	 * <p>
-	 * Seven of the corpus's eight packs read that sign, four of them written exactly as
-	 * {@code cross(at_tangent.xyz, gl_Normal.xyz) * at_tangent.w}, which is Iris's convention: that
-	 * cross product is the true bitangent for {@code w = +1} and its opposite for {@code w = -1}, so
-	 * {@code w} is what corrects the chirality rather than a fixed negation. Body Camera is the
-	 * eighth: it takes {@code .xyz} alone and crosses it with the normal unscaled, which is the
-	 * {@code +1} chirality applied to every quad whatever this answers.
-	 * <p>
-	 * Iris reaches the same value from the other end,
-	 * {@code sign(dot(bitangent, tangent x normal))} in {@code NormalHelper.computeTangent}, which
-	 * reduces to this for a quad whose corners are in one plane. Written the other way round it is
-	 * not a subtle error: every normal map on the terrain has its green channel inverted and lights
-	 * a bump as a dent.
-	 * <p>
-	 * <strong>Every place that writes the sign goes through here, and one lies outside this
-	 * file</strong>: the {@code at_tangent} entry of {@code VertexPrologue.BETTER_DEFAULTS}, which
-	 * answers the same question for a mesh carrying no tangent at all. Nothing checks that the two
-	 * agree, so a hand that turns one has to turn the other.
-	 */
-	private static float handedness(float textureArea) {
-		return textureArea < 0.0F ? 1.0F : -1.0F;
-	}
-
-	/**
-	 * Any unit vector at a right angle to the normal already in the frame. The direction only: the
-	 * sign is whatever a triangle of this quad measured, or the frame's starting value when none
-	 * could. Being at a right angle already, it is what {@link #orthogonalise} leaves alone.
-	 * <p>
-	 * <strong>Iris answers this case with whatever tangent it last managed to compute.</strong> When
-	 * both triangles refuse, {@code NormalHelper.computeTangent} returns before it writes its output
-	 * vector, so {@code XHFPTerrainVertex} keeps the one it already held. That field belongs to the
-	 * encoder, and Sodium builds one per pass and facing and reuses it for every section a worker
-	 * meshes, so what is carried in is an earlier quad of the same bucket and need not belong to
-	 * this mesh at all. Before any tangent has been computed it holds {@code (0,1,0)} with a
-	 * handedness of {@code +1}, which is the one place the reference states the value this file
-	 * starts from. {@code encodeNormalTangent} takes the normal's component out of every tangent it
-	 * packs, not only a carried one, but in a facing bucket that projection changes nothing: the
-	 * carried tangent lies at a right angle to the shared normal already, so the carried direction
-	 * is exactly what the pack reads. Only a carried tangent parallel to the normal leaves nothing,
-	 * and there an axis of a basis built from that normal takes its place: with the starting value
-	 * above, that is the first quads of the two vertical buckets, not every quad that gets here.
-	 * <p>
-	 * So the difference is real twice over: this answer depends on the quad alone where that one
-	 * depends on the order the bucket was filled in, and on the quads where both engines do
-	 * substitute, the axis is not the same axis, Frisvad's basis against a cross with the less
-	 * aligned of the first two axes. Nothing in 26.2 makes the carry-over impossible, so it is a
-	 * divergence rather than a choice.
-	 */
-	private static void perpendicular(float[] frame) {
-		// Crossed with the less aligned of the x and y axes, so the result is never a zero.
-		boolean upright = Math.abs(frame[1]) < Math.abs(frame[0]);
-		frame[3] = upright ? -frame[2] : 0.0F;
-		frame[4] = upright ? 0.0F : frame[2];
-		frame[5] = upright ? frame[0] : -frame[1];
-		normalise(frame, 3);
 	}
 
 	/**
@@ -879,19 +725,10 @@ public final class TerrainMesh implements ChunkVertexType {
 	private static int midBlock(ChunkVertexEncoder.Vertex vertex) {
 		int origin = ((TerrainVertex) vertex).vitrailBlockOrigin();
 
-		return (offset(TerrainVertex.origin(origin, 0), vertex.x) & 0xFF)
-				| ((offset(TerrainVertex.origin(origin, 1), vertex.y) & 0xFF) << 8)
-				| ((offset(TerrainVertex.origin(origin, 2), vertex.z) & 0xFF) << 16)
+		return (TerrainGeometry.offset(TerrainVertex.origin(origin, 0), vertex.x) & 0xFF)
+				| ((TerrainGeometry.offset(TerrainVertex.origin(origin, 1), vertex.y) & 0xFF) << 8)
+				| ((TerrainGeometry.offset(TerrainVertex.origin(origin, 2), vertex.z) & 0xFF) << 16)
 				| (TerrainVertex.emission(origin) << 24);
-	}
-
-	/**
-	 * One axis of that offset, from the corner of the block to the vertex, in sixty-fourths. Floored
-	 * and not truncated, which is the rounding Iris's own cast performs on its own argument
-	 * everywhere that argument is positive; the javadoc above says where the two part all the same.
-	 */
-	private static int offset(int block, float vertex) {
-		return (int) Math.floor((block + 0.5F - vertex) * 64.0F);
 	}
 
 	/**

@@ -1,0 +1,28 @@
+# Every action the workflows run is pinned to a full commit rather than to a tag, since a tag is a
+# pointer its owner can move and a commit is not. The price of a pin is that it never moves on its
+# own either, and this is what moves it: once a week, one request against dev, where every change
+# lands, main taking it at the next release like the rest. The file itself is read off main, the
+# default branch, so it starts working at the release that carries it there.
+#
+# That request has to pass what every other request passes, and commits.yml checks the branch name
+# as well as each subject. A branch named after one action cannot be written in that form, the name
+# carrying a slash and the version a dot, so the updates travel as one group: its branch is the
+# template below followed by a digest of the updates, ci/bump-actions-0123abcdef, and its subject
+# opens on the prefix, "ci: bump the actions group with 2 updates". Dependabot's own labels are
+# switched off, label.yml posing ci off that branch name as it does for every other request.
+
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    target-branch: dev
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+    pull-request-branch-name:
+      template: "ci/bump-{group_name}"
+    commit-message:
+      prefix: ci
+    labels: []

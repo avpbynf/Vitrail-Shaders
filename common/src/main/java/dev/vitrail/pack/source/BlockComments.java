@@ -12,6 +12,12 @@ public final class BlockComments {
 	 * and only the closing pair is looked for.
 	 */
 	public static boolean openAfter(String line, boolean commented) {
+		// Every change of state needs a slash: a line comment, an opening pair and a closing pair all
+		// have one, so a line without any leaves the state where it was.
+		if (line.indexOf('/') < 0) {
+			return commented;
+		}
+
 		for (int at = 0; at < line.length() - 1; at++) {
 			if (commented) {
 				if (line.charAt(at) == '*' && line.charAt(at + 1) == '/') {

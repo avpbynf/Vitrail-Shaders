@@ -143,7 +143,7 @@ final class EntityProgram extends FamilyProgram {
 	 */
 	static EntityProgram of(PackProgram.Loaded loaded, EntityDraw.Element element, PackValues values,
 			int load, List<ChainPlan.Attachment> writes, TargetPlan chainTargets,
-			ColorTargets targets, boolean chainRuns) {
+			ColorTargets targets, BlockRing blocks, boolean chainRuns) {
 		// Bound again against the chain's own plan, for the reason the terrain and the sky are: what
 		// the load bound them against is a plan without the user's pass filter. The step is the
 		// PIECE's, which is where the two halves part company: the writing half is drawn in the
@@ -239,7 +239,7 @@ final class EntityProgram extends FamilyProgram {
 				null,
 				// Drawn in the game's own volume, so the dh matrices answer the game's.
 				false),
-				bound, values, load, element.format(), writes, targets, chainRuns));
+				bound, values, load, element.format(), writes, targets, blocks, chainRuns));
 	}
 
 	/**

@@ -11,12 +11,14 @@ import com.mojang.blaze3d.vulkan.glsl.GlslCompiler;
 import com.mojang.blaze3d.vulkan.glsl.IntermediaryShaderModule;
 import com.mojang.blaze3d.vulkan.glsl.ShaderCompileException;
 import dev.vitrail.cache.ModuleCache;
+import dev.vitrail.cache.ModuleShare;
 import dev.vitrail.glsl.LoadClock;
 import dev.vitrail.render.GeometryStage;
 import dev.vitrail.render.PackNames;
 import dev.vitrail.render.RawLocals;
 import dev.vitrail.render.ShaderDebugInfo;
 import dev.vitrail.render.storage.StorageImages;
+import dev.vitrail.render.timing.ModuleCensus;
 import org.lwjgl.util.shaderc.Shaderc;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -182,12 +184,18 @@ public abstract class GlslCompilerMixin {
 		}
 	}
 
+	/**
+	 * A one (SpvDim1D, 0) or three (SpvDim3D, 2) dimensional image is read as two dimensional (1),
+	 * the only shape the game's own shaders sample and so the only one its check lets through; the
+	 * view bound is the one the engine allocated in the declared shape. Bliss keeps its block data as
+	 * a one dimensional image, and every program sampling it was refused before.
+	 */
 	@WrapOperation(method = "addToBindGroup", require = 1,
 			at = @At(value = "INVOKE",
 					target = "Lcom/mojang/blaze3d/vulkan/glsl/SpvSampler;dimensions()I"))
-	private static int vitrail$allow3d(@Coerce Object sampler, Operation<Integer> original) {
+	private static int vitrail$allowLineAndVolume(@Coerce Object sampler, Operation<Integer> original) {
 		int dimension = original.call(sampler);
-		return dimension == 2 ? 1 : dimension;
+		return (dimension == 0 || dimension == 2) ? 1 : dimension;
 	}
 
 	/**
@@ -222,7 +230,17 @@ public abstract class GlslCompilerMixin {
 	 * move them, so they say the same thing about every unit and cannot tell two of them apart.
 	 * The debug name is handed to {@link ModuleCache#lookup} so the rebuilt module carries this
 	 * chain's identifier, and it is not hashed: that name carries the load number the disk key
-	 * must not see.
+	 * must not see. Whether it is one of ours is hashed, since that decides whether the passes run
+	 * over the module at all.
+	 * <p>
+	 * <strong>Three places answer before the compiler runs, in this order.</strong> The load's own
+	 * {@link ModuleShare}, which holds what an earlier program of this load had made of the same
+	 * text; then the disk cache; then shaderc. A unit is claimed for the length of all three, so that
+	 * a second program asking for it while the first is being made waits and finds it in the table
+	 * rather than compiling it beside the first. Only this engine's units go through the table: the
+	 * game's own are compiled once each and are left as they were, as every pass here leaves them.
+	 * What the worker's own compiler and the device's compile the same way, this being the one
+	 * method both call, so the road a program takes cannot decide whether its text is shared.
 	 */
 	@WrapMethod(method = "createIntermediary", require = 1)
 	private IntermediaryShaderModule vitrail$module(String filename, String source, ShaderType type,
@@ -237,21 +255,45 @@ public abstract class GlslCompilerMixin {
 			// keyed under its own name all the same: the two roads compile the same text to
 			// different bytes, and a blob stored under the wrong one would be served to the wrong
 			// stage.
-			String key = ModuleCache.keyOf(source,
-					GeometryStage.compiling() ? GEOMETRY_STAGE : type.name());
-			IntermediaryShaderModule served = ModuleCache.lookup(key, filename);
-			if (served != null) {
-				return served;
+			String stage = GeometryStage.compiling() ? GEOMETRY_STAGE : type.name();
+			boolean ours = RawLocals.ours(filename);
+			String key = ModuleCache.keyOf(source, stage, ours);
+			// The disk key where there is one, and the same digest made without a disk where
+			// there is none: a load with the cache switched off shares its units all the same.
+			String unit = !ours ? null
+					: key != null ? key : ModuleCache.shareKeyOf(source, stage, true);
+			String seen = key != null ? key : unit;
+			ModuleShare.Claim claim = ModuleShare.load().claim(unit);
+			try {
+				IntermediaryShaderModule served = ModuleCache.shared(unit, filename);
+				if (served != null) {
+					ModuleCensus.shared(filename, seen);
+
+					return served;
+				}
+
+				served = ModuleCache.lookup(key, filename);
+				if (served != null) {
+					ModuleCensus.served(filename, seen);
+					// Into the table before anything has bent it to a pipeline, so the next program
+					// of this load with the same text does not read the file again.
+					ModuleCache.keep(unit, null, served);
+
+					return served;
+				}
+
+				// Counted before the call and not after it: a unit a pack broke throws out of the
+				// compile, and counting on the way back would leave that load short by exactly the
+				// units somebody is reading the log to find.
+				ModuleCache.building(filename);
+				ModuleCensus.compiled(filename, seen);
+				IntermediaryShaderModule built = original.call(filename, source, type);
+				ModuleCache.keep(unit, key, built);
+
+				return built;
+			} finally {
+				claim.release();
 			}
-
-			// Counted before the call and not after it: a unit a pack broke throws out of the
-			// compile, and counting on the way back would leave that load short by exactly the
-			// units somebody is reading the log to find.
-			ModuleCache.building(filename);
-			IntermediaryShaderModule built = original.call(filename, source, type);
-			ModuleCache.store(key, built);
-
-			return built;
 		} finally {
 			RawLocals.end();
 			LoadClock.module(System.nanoTime() - began);

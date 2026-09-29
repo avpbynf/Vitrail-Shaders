@@ -313,13 +313,25 @@ public final class SettingsFile {
 		stored.values().forEach((name, value) -> lines.add(name + "=" + value));
 
 		Path temporary = file.resolveSibling(file.getFileName() + ".part");
-		Files.write(temporary,
-				String.join("\n", lines).concat("\n").getBytes(StandardCharsets.ISO_8859_1));
 		try {
-			Files.move(temporary, file, StandardCopyOption.REPLACE_EXISTING,
-					StandardCopyOption.ATOMIC_MOVE);
-		} catch (AtomicMoveNotSupportedException e) {
-			Files.move(temporary, file, StandardCopyOption.REPLACE_EXISTING);
+			Files.write(temporary,
+					String.join("\n", lines).concat("\n").getBytes(StandardCharsets.ISO_8859_1));
+			try {
+				Files.move(temporary, file, StandardCopyOption.REPLACE_EXISTING,
+						StandardCopyOption.ATOMIC_MOVE);
+			} catch (AtomicMoveNotSupportedException e) {
+				Files.move(temporary, file, StandardCopyOption.REPLACE_EXISTING);
+			}
+		} catch (IOException e) {
+			// A write or a move that failed would leave the .part in the player's shaderpacks folder
+			// for ever, beside the packs, and nothing else ever looks at it. PackFile.write does the
+			// same for the same reason.
+			try {
+				Files.deleteIfExists(temporary);
+			} catch (IOException swallowed) {
+				e.addSuppressed(swallowed);
+			}
+			throw e;
 		}
 	}
 

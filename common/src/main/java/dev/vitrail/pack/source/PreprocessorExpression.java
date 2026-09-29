@@ -25,10 +25,15 @@ import java.util.regex.Pattern;
  * fractional. What a comparison or a logical operator hands back is whole, being nought or one.
  * <p>
  * A name stands for a value, and that value may itself be an expression naming other settings,
- * so evaluating one expression can start another. The budget for that is shared across the
- * whole nest rather than restarting at each hop, because a pack is downloaded content and
- * {@code #define A (B)} beside {@code #define B (A)} would otherwise exhaust the stack. That
- * failure is not catchable where this is called from, so it has to be impossible here.
+ * so evaluating one expression can start another. Two budgets are spent on that, and both are
+ * shared across the whole nest rather than restarting at each hop, because a pack is downloaded
+ * content. The depth is one: {@code #define A (B)} beside {@code #define B (A)} would otherwise
+ * exhaust the stack, and that failure is not catchable where this is called from, so it has to be
+ * impossible here. The number of names resolved is the other, and the depth alone does not bound
+ * it: every name is read again from its text wherever it is met, so {@code A} written as a hundred
+ * {@code B} added up, {@code B} as a hundred {@code C} and so on four levels down is a million
+ * parses and a hundred million lookups behind one {@code #if}, on the thread that draws, well
+ * inside the depth.
  * <p>
  * An expression this cannot parse yields no answer rather than false, and the caller is
  * expected to treat that as true. Including code that should have been skipped leaves a
@@ -39,6 +44,15 @@ public final class PreprocessorExpression {
 
 	/** How far one name may lead to another before the nest is called unresolvable. */
 	private static final int MAX_RESOLUTION_DEPTH = 8;
+
+	/**
+	 * How many names one condition may resolve, counting every level of the nest, before it is
+	 * given no answer, which its callers read as taken. The report's walk of Complementary
+	 * Reimagined, Photon and Eclipse decides a hundred thousand conditions between them and none
+	 * resolves more than twelve names, so this is eighty times that, and it keeps what one condition
+	 * can cost to a thousand parses where the depth alone allowed a million.
+	 */
+	private static final int MAX_RESOLUTIONS = 1_000;
 
 	/**
 	 * No real expression nests this deep, and a crafted one must not reach the stack limit. A
@@ -55,6 +69,7 @@ public final class PreprocessorExpression {
 	private final List<String> tokens;
 	private final Map<String, String> defines;
 	private final int depth;
+	private final Budget budget;
 
 	private int position;
 	private int nesting;
@@ -109,10 +124,39 @@ public final class PreprocessorExpression {
 		}
 	}
 
-	private PreprocessorExpression(List<String> tokens, Map<String, String> defines, int depth) {
+	private PreprocessorExpression(List<String> tokens, Map<String, String> defines, int depth,
+			Budget budget) {
 		this.tokens = tokens;
 		this.defines = defines;
 		this.depth = depth;
+		this.budget = budget;
+	}
+
+	/**
+	 * What one condition has left to resolve, handed to every parser its names start so that the
+	 * nest spends one count between them.
+	 * <p>
+	 * Running out is remembered and not only answered: the name that finds the count empty reads as
+	 * nought, like one past the depth, but a nought deep in the nest can still come out as a clean
+	 * true or false at the top, and a condition that was not worked out must not claim to have
+	 * been. So {@link PreprocessorExpression#decide} asks this afterwards and gives no answer.
+	 */
+	private static final class Budget {
+
+		private int left = MAX_RESOLUTIONS;
+		private boolean exhausted;
+
+		private boolean spend() {
+			if (this.left == 0) {
+				this.exhausted = true;
+
+				return false;
+			}
+
+			this.left--;
+
+			return true;
+		}
 	}
 
 	public static Optional<Boolean> evaluate(String expression, Map<String, String> defines) {
@@ -132,7 +176,11 @@ public final class PreprocessorExpression {
 
 	/** The same as {@link #evaluate}, with what the caller needs to know about the text itself. */
 	public static Verdict decide(String expression, Map<String, String> defines) {
-		Reading read = read(expression, defines, 0);
+		Budget budget = new Budget();
+		Reading read = read(expression, defines, 0, budget);
+		if (budget.exhausted) {
+			return new Verdict(Optional.empty(), read.fractional());
+		}
 
 		return new Verdict(read.value().map(Scalar::truth), read.fractional());
 	}
@@ -142,8 +190,11 @@ public final class PreprocessorExpression {
 	}
 
 	/** The numeric answer, which is what a name resolving to an expression needs. */
-	private static Reading read(String expression, Map<String, String> defines, int depth) {
-		if (depth > MAX_RESOLUTION_DEPTH) {
+	private static Reading read(String expression, Map<String, String> defines, int depth,
+			Budget budget) {
+		// Once the count is out nothing further is parsed at all: the answer is already none, and
+		// the parsers still open above this one would otherwise each start their next name anew.
+		if (depth > MAX_RESOLUTION_DEPTH || budget.exhausted) {
 			return new Reading(Optional.empty(), false);
 		}
 
@@ -152,7 +203,7 @@ public final class PreprocessorExpression {
 			return new Reading(Optional.empty(), false);
 		}
 
-		PreprocessorExpression parser = new PreprocessorExpression(tokens, defines, depth);
+		PreprocessorExpression parser = new PreprocessorExpression(tokens, defines, depth, budget);
 		Scalar result = parser.logicalOr();
 		if (parser.failed || parser.malformed || parser.position < tokens.size()) {
 			return new Reading(Optional.empty(), parser.fractional);
@@ -524,7 +575,7 @@ public final class PreprocessorExpression {
 		}
 
 		if (isIdentifier(token)) {
-			Reading read = resolve(token, this.defines, this.depth + 1);
+			Reading read = resolve(token, this.defines, this.depth + 1, this.budget);
 			this.fractional |= read.fractional();
 
 			return read.value().orElse(Scalar.of(0));
@@ -563,8 +614,9 @@ public final class PreprocessorExpression {
 	 * identifier or a whole expression. A name nothing defines is zero, which is what the
 	 * preprocessor does and what lets a pack test a setting it never declared.
 	 */
-	private static Reading resolve(String name, Map<String, String> defines, int depth) {
-		if (depth > MAX_RESOLUTION_DEPTH) {
+	private static Reading resolve(String name, Map<String, String> defines, int depth,
+			Budget budget) {
+		if (depth > MAX_RESOLUTION_DEPTH || !budget.spend()) {
 			return new Reading(Optional.of(Scalar.of(0)), false);
 		}
 
@@ -581,13 +633,13 @@ public final class PreprocessorExpression {
 		}
 
 		if (isIdentifier(trimmed)) {
-			return resolve(trimmed, defines, depth + 1);
+			return resolve(trimmed, defines, depth + 1, budget);
 		}
 
 		// An expression keeps its value rather than collapsing to one or zero. A pack that
 		// writes SHADOW_RES as QUALITY * 512 and then compares it against 256 is comparing
 		// sizes, and reducing that to a truth value quietly gives the wrong branch.
-		Reading read = read(trimmed, defines, depth + 1);
+		Reading read = read(trimmed, defines, depth + 1, budget);
 
 		return new Reading(Optional.of(read.value().orElse(Scalar.of(1))), read.fractional());
 	}

@@ -2,6 +2,7 @@ package dev.vitrail.pack.texture;
 
 import dev.vitrail.pack.model.BufferObject;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -28,12 +29,27 @@ public final class CustomStorage {
 	 */
 	private static final Map<String, Integer> bindings = new ConcurrentHashMap<>();
 
+	/**
+	 * Every answer {@link #indexOf} can give, rebuilt by whichever of {@link #install},
+	 * {@link #clear} and {@link #declare} changed one of the two halves above.
+	 * <p>
+	 * A table rather than the walk it replaces because of who asks: {@code StorageBuffers.bound},
+	 * once per descriptor of every pass of the game, Sodium's included, as soon as the loaded pack
+	 * declares a storage buffer at all, and nearly every name it is handed is one of the game's own
+	 * that the walk said no to one lambda at a time. Rebuilt here rather than beside the
+	 * allocation, because the bindings go on being filed after the buffers exist: an on-demand
+	 * family the pack-load worker is still translating hands its programs out after the first frame
+	 * has allocated them.
+	 */
+	private static volatile Map<String, Integer> indices = Map.of();
+
 	private CustomStorage() {
 	}
 
 	/** Records the live {@code bufferObject.N} lines of the pack about to be translated. */
-	public static void install(BufferObject.Reading reading) {
+	public static synchronized void install(BufferObject.Reading reading) {
 		declared = reading;
+		reindex();
 	}
 
 	/**
@@ -45,9 +61,10 @@ public final class CustomStorage {
 	 * without replacing it would then draw a frame with the two disagreeing, and
 	 * {@code PackChoice.load} carries the whole of why.
 	 */
-	public static void clear() {
+	public static synchronized void clear() {
 		declared = BufferObject.Reading.empty();
 		bindings.clear();
+		reindex();
 	}
 
 	/**
@@ -57,12 +74,36 @@ public final class CustomStorage {
 	 * Called for every program handed out and not for every text read, so that a program restored
 	 * from the translation store files its blocks exactly like one that was just translated.
 	 */
-	public static void declare(String name, int binding) {
+	public static synchronized void declare(String name, int binding) {
 		if (name == null || name.isEmpty()) {
 			return;
 		}
 
-		bindings.put(name, binding);
+		// Most calls file again what an earlier program of the same pack filed, and those leave the
+		// table as it stands.
+		Integer filed = bindings.put(name, binding);
+		if (filed == null || filed != binding) {
+			reindex();
+		}
+	}
+
+	/**
+	 * Builds {@link #indices} over both halves, in the order the walk it replaces answered: a name
+	 * a {@code bufferObject} line declares before a binding a program filed under the same name,
+	 * and the first line declaring a name before any later one.
+	 * <p>
+	 * Called with the class held, so that two threads filing at once cannot publish their tables
+	 * out of order: whichever builds last has seen what both of them filed.
+	 */
+	private static void reindex() {
+		Map<String, Integer> declaredNames = new HashMap<>();
+		for (BufferObject buffer : declared.buffers()) {
+			buffer.name().ifPresent(name -> declaredNames.putIfAbsent(name, buffer.index()));
+		}
+
+		Map<String, Integer> table = new HashMap<>(bindings);
+		table.putAll(declaredNames);
+		indices = Map.copyOf(table);
 	}
 
 	/**
@@ -84,13 +125,7 @@ public final class CustomStorage {
 
 	/** The {@code bufferObject} index this GLSL name maps to, or {@code -1}. */
 	public static int indexOf(String name) {
-		for (BufferObject buffer : declared.buffers()) {
-			if (buffer.name().filter(name::equals).isPresent()) {
-				return buffer.index();
-			}
-		}
-
-		Integer index = bindings.get(name);
+		Integer index = indices.get(name);
 		return index == null ? -1 : index;
 	}
 }

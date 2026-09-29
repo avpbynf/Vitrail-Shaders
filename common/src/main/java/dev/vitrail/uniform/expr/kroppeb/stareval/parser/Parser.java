@@ -287,12 +287,19 @@ public class Parser {
 					return result;
 				}
 
+				// Neither message prints what is left on the stack, as they used to and as they
+				// still do in Iris (kroppeb/stareval/parser/Parser.java:294, :307). Each element
+				// there is a whole subtree, printed by recursion, so a pack that nests a few
+				// thousand calls and leaves a stray token beside them overflowed the stack right
+				// here: an Error, which walks through the catch that reads this exception. The
+				// one reader of it quotes the expression anyway (CustomUniforms.Builder.declare),
+				// so what goes is a dump of parser elements from the log, and nothing from the
+				// image: a declaration that fails here is dropped either way.
 				if (this.peek() instanceof UnfinishedArgsExpression) {
 					throw new MissingTokenException("Expected a closing bracket", endIndex);
 				} else {
 					throw new UnexpectedTokenException(
-						"The stack of tokens isn't empty at the end of the expression: " + this.stack +
-							" top: " + result, endIndex);
+						"The stack of tokens isn't empty at the end of the expression", endIndex);
 				}
 			} else {
 				Element top = this.peek();
@@ -304,8 +311,7 @@ public class Parser {
 						endIndex);
 				} else {
 					throw new UnexpectedTokenException(
-						"The stack of tokens contains an unexpected token at the top: " + this.stack,
-						endIndex);
+						"The stack of tokens contains an unexpected token at the top", endIndex);
 				}
 			}
 		} else {

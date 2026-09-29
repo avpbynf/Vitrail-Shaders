@@ -9,9 +9,10 @@ Every GLSL unit a pack ships is rewritten before it can draw, then handed to the
 already embeds, which produces SPIR-V and performs reflection and binding remapping itself. The
 chain's own units go at selection, and the six families that draw the world and the sky follow on a
 worker as soon as the pack is loaded, read one after another on that one worker and compiled by a
-task each. A first draw that outruns it reads its own family, which is the fallback rather than the
-road it normally takes. What is translated is never *patched* afterwards: a setting that moves
-rebuilds its units from the pack's source, and so does a change of dimension, which rebuilds the lot.
+task each. Nothing else reads a family: one the worker does not reach stays unread for that load,
+and the game's own shaders draw it, which the log and the settings screen both name as an error.
+What is translated is never *patched* afterwards: a setting that moves rebuilds its units from the
+pack's source, and so does a change of dimension, which rebuilds the lot.
 
 Two properties follow, and both are load-bearing:
 
@@ -56,9 +57,16 @@ files expanded and lines written.
 **A budget tested only when a file is opened does not bound a single oversized file.** It has to be
 tested on every emitted line.
 
+**A ceiling on each file does not bound a pack.** A small archive of many files, each just under the
+ceiling and each compressing to almost nothing, inflates to gigabytes. The text one opening reads
+and the entries one walk of the pack meets are bounded as totals too.
+
 **Recursion budgets must travel through the expression evaluator.** Macro resolution and expression
 evaluation are mutually recursive; resetting the budget on each hop lets two defines that reference
-each other overflow the stack.
+each other overflow the stack. The depth is not the only budget it needs: a name is read again
+wherever it is met, so a define written as a wide sum of the next costs the width to the power of
+the levels, well inside the depth. The names one condition resolves are counted across the nest too,
+and a condition that runs out is given no answer.
 
 **Why bounding rather than catching.** Stack overflow and out-of-memory are errors, not runtime
 exceptions, so a catch around pack reading does not see them. The fix is to make sure the error is
@@ -282,7 +290,10 @@ because lifting makes it unconditional and can collide with a same-named ordinar
 live branch. And a scan for a statement boundary has to be bounded on both sides, or an
 unterminated declaration makes it sweep the rest of the file once per declaration; running out of
 budget has to be told apart from reaching the start of the file, because the first means "give up on
-this declaration" and the second is a real answer. Guessing a boundary would erase valid code.
+this declaration" and the second is a real answer. The scan for the end also stops at a closing
+bracket it never opened. Every parameter of a function is asked about, a parameter being a name
+behind a type like any declaration, and a scan that walked out of the list would take the first
+semicolon of some later `for` header for the end of it. Guessing a boundary would erase valid code.
 
 ## Deciding where a fragment stage writes
 
@@ -387,8 +398,14 @@ screenshot will ever show it.
 
 Packs can also define their own uniforms as expressions over others. Those form a dependency graph
 that is validated: a cycle is refused by naming the uniforms involved, a broken uniform withdraws
-its dependents by name rather than being silently replaced by zero mid-graph, and a custom uniform
-that shadows a builtin name is refused rather than resolved by precedence.
+its dependents by name rather than being silently replaced by zero mid-graph, a custom uniform
+that shadows a builtin name is refused rather than resolved by precedence, and one nested more than
+128 levels deep is refused before it is resolved. That last one is a bound rather than a catch, for
+the reason given under [a pack is downloaded content](#a-pack-is-downloaded-content): resolving and
+evaluating a declaration both recurse, and a stack overflow is an error no catch around pack
+reading sees. The functions those expressions call follow OptiFine's list where the reference
+misreads it, and `&&` binds tighter than `||` as it does in OptiFine, which is a divergence and is
+argued as one in [uniforms](internals/uniforms.md#uniforms-the-pack-defines-for-itself).
 
 ## What resists, and whose fault it is
 
@@ -400,11 +417,12 @@ for that path, three different mechanisms, and it is worth knowing which:
 
 - **Samplers are refused by name.** The compiler takes one as two-dimensional or as a cube, or as a
   texel buffer where the pipeline declared that name as a uniform rather than as a sampler, and
-  rejects every other dimensionality. Three dimensions are the one exception, and it is this
-  engine's doing: a mixin makes that walk read the dimension as two, so a `sampler3D` naming a
-  volume an `image` directive fills, or the image itself, is bound and never refused. What stays
-  refused is a three-dimensional shape with nothing behind it, and a volume the pack ships as a
-  file escapes by being flattened onto a flat atlas long before it reaches here.
+  rejects every other dimensionality. One and three dimensions are the exceptions, and they are
+  this engine's doing: a mixin makes that walk read either as two, so a `sampler1D` or `sampler3D`
+  naming an image an `image` directive declares, or the image itself, is bound and never refused.
+  Bliss and the packs made from it keep their block data on such a line. What stays refused is a
+  one- or three-dimensional shape with nothing behind it, and a volume the pack ships as a file
+  escapes by being flattened onto a flat atlas long before it reaches here.
 - **Compute has nowhere to go through the Java facade.** The game's shader-type enumeration carries
   a vertex stage and a fragment stage and nothing else, and the device exposes no way to precompile
   anything but a render pipeline. The Vulkan backend behind that facade already has a compute-capable
@@ -497,6 +515,13 @@ Any map that is **iterated** must have a defined iteration order. A common immut
 deliberately randomises iteration with a per-process salt, which makes uniform block members and
 vertex attributes come out in a different order on each launch: a defect that reproduces only
 across process boundaries, and looks like nondeterministic hardware behaviour. Tables that are
-iterated go through an insertion-ordered map; the randomising factory is for tables queried by key
-only. It also rejects null values, which matters wherever a table legitimately holds a "no parent"
-entry.
+iterated go through an insertion-ordered map, or one ordered by its key where the key is an
+enumeration; the randomising factory is for tables queried by key only. It also rejects null values,
+which matters wherever a table legitimately holds a "no parent" entry.
+
+A translated program carries two such tables, and it puts both in order itself rather than trusting
+whoever builds it. Its stages are walked for the storage blocks the bind group lays out, and are
+written to disk in the order they are walked in; a program read back from disk has to come out in
+the order a fresh translation has, whatever order the file holds, so they follow the order of the
+stage kinds rather than the order they were put in. The vertex inputs it synthesises keep the order
+the stages declared them in.

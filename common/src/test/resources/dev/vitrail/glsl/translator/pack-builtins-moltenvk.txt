@@ -1,0 +1,66 @@
+--- pack-builtins-moltenvk.fsh (FRAGMENT) ---
+#version 460 core
+#define <engine defines>
+uniform sampler2D colortex0;
+uniform usampler2D colortex1;
+uint ofPackUnorm4x8(vec4 ofV) { uvec4 ofB = uvec4(round(clamp(ofV, 0.0, 1.0) * 255.0)); return ofB.x | (ofB.y << 8u) | (ofB.z << 16u) | (ofB.w << 24u); }
+vec4 ofUnpackUnorm4x8(uint ofP) { return vec4(uvec4(ofP, ofP >> 8u, ofP >> 16u, ofP >> 24u) & 255u) / 255.0; }
+uint ofPackUnorm2x16(vec2 ofV) { uvec2 ofB = uvec2(round(clamp(ofV, 0.0, 1.0) * 65535.0)); return ofB.x | (ofB.y << 16u); }
+vec2 ofUnpackUnorm2x16(uint ofP) { return vec2(uvec2(ofP, ofP >> 16u) & 65535u) / 65535.0; }
+uint ofPackSnorm4x8(vec4 ofV) { uvec4 ofB = uvec4(ivec4(round(clamp(ofV, -1.0, 1.0) * 127.0))) & 255u; return ofB.x | (ofB.y << 8u) | (ofB.z << 16u) | (ofB.w << 24u); }
+vec4 ofUnpackSnorm4x8(uint ofP) { ivec4 ofB = ivec4((uvec4(ofP, ofP >> 8u, ofP >> 16u, ofP >> 24u) & 255u) ^ 128u) - 128; return clamp(vec4(ofB) / 127.0, -1.0, 1.0); }
+uint ofPackSnorm2x16(vec2 ofV) { uvec2 ofB = uvec2(ivec2(round(clamp(ofV, -1.0, 1.0) * 32767.0))) & 65535u; return ofB.x | (ofB.y << 16u); }
+vec2 ofUnpackSnorm2x16(uint ofP) { ivec2 ofB = ivec2((uvec2(ofP, ofP >> 16u) & 65535u) ^ 32768u) - 32768; return clamp(vec2(ofB) / 32767.0, -1.0, 1.0); }
+layout(location = 0) out uvec4 encoded;
+void ofOrderOutputs() { encoded; }
+
+
+
+
+in vec2 uv;
+
+
+
+void main() { ofOrderOutputs();
+	vec4 c = texture(colortex0, uv);
+	uint low = ofPackUnorm4x8(c);
+	uint high = ofPackUnorm2x16(c.zw) + ofPackSnorm4x8(c) + ofPackSnorm2x16(c.xy);
+	vec4 back = ofUnpackUnorm4x8(texelFetch(colortex1, ivec2(0), 0).x);
+	vec2 pair = ofUnpackUnorm2x16(low) + ofUnpackSnorm2x16(high) + ofUnpackSnorm4x8(low).xy;
+	encoded = uvec4(low, high, uint(back.x * 255.0), uint(pair.x));
+}
+--- notes ---
+fragmentOutputs = 1
+dynamicFragData = 0
+uniformConflicts = 0
+shadowCalls = 0
+unwrappedShadow = 0
+strippedExtensions = 0
+depthEpilogue = 0
+alphaEpilogue = 0
+coverage = 0
+depthLookups = 0
+parameterLookups = 0
+pinnedLookups = 0
+unpinnedParameterLookups = 0
+fragCoordZ = 0
+fragCoordXyz = 0
+fragCoordUnhandled = 0
+fragDepthWrites = 0
+fragDepthUnhandled = 0
+conflictNames = []
+comparedSamplers = []
+hardwareCompared = []
+retypedSamplers = []
+storageBlocks = []
+volumeLookups = 0
+volumesLeftAlone = 0
+trigCalls = 0
+gameTextureMatrix = 0
+gameModelView = 0
+--- drawBuffers ---
+[]
+--- block ---
+--- samplers ---
+sampler2D colortex0
+usampler2D colortex1

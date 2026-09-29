@@ -1,0 +1,75 @@
+--- shadow-arithmetic-road.fsh (FRAGMENT) ---
+#version 460 core
+#define <engine defines>
+uniform sampler2D customShadow;
+uniform sampler2DArray shadowCascade;
+uniform sampler2D colortex0;
+float ofShadowCompare(sampler2D ofMap, vec3 ofAt, ivec2 ofOffset) { vec2 ofSize = vec2(textureSize(ofMap, 0)); vec2 ofUv = ofAt.xy + vec2(ofOffset) / ofSize; vec4 ofTests = step(vec4(ofAt.z), textureGather(ofMap, ofUv, 0)); vec2 ofPart = fract(ofUv * ofSize - 0.5); return mix(mix(ofTests.w, ofTests.z, ofPart.x), mix(ofTests.x, ofTests.y, ofPart.x), ofPart.y); }
+float ofShadowCompare(sampler2D ofMap, vec3 ofAt) { return ofShadowCompare(ofMap, ofAt, ivec2(0)); }
+float ofShadowCompare(sampler2D ofMap, vec3 ofAt, float ofLod) { return ofShadowCompare(ofMap, ofAt, ivec2(0)); }
+float ofShadowCompare(sampler2D ofMap, vec3 ofAt, float ofLod, ivec2 ofOffset) { return ofShadowCompare(ofMap, ofAt, ofOffset); }
+float ofShadowCompare(sampler2D ofMap, vec3 ofAt, ivec2 ofOffset, float ofBias) { return ofShadowCompare(ofMap, ofAt, ofOffset); }
+layout(location = 0) out vec4 ofFragData0;
+void ofOrderOutputs() { ofFragData0; }
+
+
+
+
+
+in vec3 shadowPos;
+in vec2 texcoord;
+
+float compare(sampler2D tex, vec3 pos) {
+	return ofShadowCompare(tex, pos) + ofShadowCompare(tex, pos, 2.0) + vec4(ofShadowCompare(tex, pos)).x;
+}
+
+float plainCompare(sampler2D tex, vec3 pos) {
+	return textureLod(tex, pos.xy, 0.0).r;
+}
+
+void main() { ofOrderOutputs();
+	float s = compare(customShadow, shadowPos);
+	s += ofShadowCompare(customShadow, shadowPos, ivec2(1, -1));
+	s += ofShadowCompare(customShadow, shadowPos, 0.0, ivec2(0, 1));
+	s += textureProj(customShadow, vec4(shadowPos, 1.0));
+	s += vec4(textureProj(customShadow, vec4(shadowPos, 1.0))).x;
+	s += textureGather(customShadow, shadowPos.xy, shadowPos.z).x;
+	s += plainCompare(colortex0, shadowPos);
+	ofFragData0 = textureLod(colortex0, texcoord, 0.0) * s;
+}
+--- notes ---
+fragmentOutputs = 1
+dynamicFragData = 0
+uniformConflicts = 0
+shadowCalls = 2
+unwrappedShadow = 4
+strippedExtensions = 0
+depthEpilogue = 0
+alphaEpilogue = 0
+coverage = 0
+depthLookups = 0
+parameterLookups = 1
+pinnedLookups = 2
+unpinnedParameterLookups = 0
+fragCoordZ = 0
+fragCoordXyz = 0
+fragCoordUnhandled = 0
+fragDepthWrites = 0
+fragDepthUnhandled = 0
+conflictNames = []
+comparedSamplers = [customShadow, shadowCascade]
+hardwareCompared = []
+retypedSamplers = [customShadow, shadowCascade]
+storageBlocks = []
+volumeLookups = 0
+volumesLeftAlone = 0
+trigCalls = 0
+gameTextureMatrix = 0
+gameModelView = 0
+--- drawBuffers ---
+[]
+--- block ---
+--- samplers ---
+sampler2D customShadow
+sampler2DArray shadowCascade
+sampler2D colortex0

@@ -64,6 +64,8 @@ import java.util.zip.InflaterOutputStream;
  * <p>
  * Absent, unreadable, corrupt, larger than any translation is, or of a shape this build cannot
  * read: every one of them is a MISS, and a miss is the translation that would have happened anyway.
+ * The last of those is also said, once a run, since a blob its digest answers for and this build
+ * cannot read is a writer and a reader that disagree rather than a file that was damaged.
  * <p>
  * The store is bounded at a quarter of a gigabyte, and bounded per edition rather than in total: a
  * development install that keeps a neighbour holds two editions and half a gigabyte. It is off
@@ -158,8 +160,9 @@ public final class TranslationCache {
 	 * The edition names a whole set of keys at once: nothing under another one can be asked for by
 	 * this build, and the ceiling has to be about what is still reachable. One neighbour is spared
 	 * for the build that owns it, and {@link #dropOtherEditions} says which and why. Called once,
-	 * before the first pack is read; a failure here leaves the cache off for the run and the loads
-	 * exactly as long as they were.
+	 * before the first pack is read; a failure of this edition's own folder leaves the cache off
+	 * for the run and the loads exactly as long as they were, while a leftover of another edition
+	 * that will not go leaves it on and is kept in {@link #problem()}.
 	 *
 	 * @param edition what this build translates into, which carries the commit it was built from
 	 *                when there is one to carry and is otherwise the family entire
@@ -173,6 +176,13 @@ public final class TranslationCache {
 
 	/**
 	 * Makes the directory, measures what is in it, and takes it into service.
+	 * <p>
+	 * <strong>Only this edition's own directory decides whether it is taken into service.</strong>
+	 * What another edition left is nothing this build reads, so a file in it that will not go, held
+	 * by a scanner or an indexer or made read-only by hand, costs the disk it sits on and is kept in
+	 * {@link #problem} for whoever has a logger. Were it to throw out of here, one stale file in a
+	 * folder no build would ever read again would leave the cache off at every launch for as long
+	 * as the file stayed.
 	 *
 	 * @param family the sanitized family of this edition, or empty to leave every neighbour alone.
 	 *               Empty for the road the property opens, which runs in a static initialiser and
@@ -183,14 +193,21 @@ public final class TranslationCache {
 		synchronized (LOCK) {
 			try {
 				Files.createDirectories(mine);
+				String left = "";
 				if (!family.isEmpty()) {
 					touch(mine);
-					dropOtherEditions(mine.getParent(), mine, family);
+					left = dropOtherEditions(mine.getParent(), mine, family);
 				}
 
-				BYTES.set(total(scan(mine, true)));
+				String dead = dropPartials(mine);
+				if (!dead.isEmpty()) {
+					left = left.isEmpty() ? dead : left + ", " + dead;
+				}
+
+				BYTES.set(total(scan(mine)));
 				directory = mine;
-				problem = "";
+				problem = left.isEmpty() ? "" : "what an earlier run left in " + mine.getParent()
+						+ " could not all be taken away, and the next launch tries again: " + left;
 			} catch (IOException | RuntimeException e) {
 				directory = null;
 				problem = e.toString();
@@ -198,7 +215,12 @@ public final class TranslationCache {
 		}
 	}
 
-	/** What went wrong at install, for whoever has a logger, or empty when nothing did. */
+	/**
+	 * What went wrong at install, for whoever has a logger, or empty when nothing did. A cache that
+	 * {@link #installed} can have one too: another edition's folder it could not wholly empty, or a
+	 * dead write of this one it could not delete, which costs disk and leaves every translation of
+	 * this build where it was.
+	 */
 	public static String problem() {
 		return problem;
 	}
@@ -295,6 +317,16 @@ public final class TranslationCache {
 			byte[] blob = inflate(raw, length);
 			program = TranslatedProgramCodec.read(blob, blob.length, inputs);
 		} catch (IOException | RuntimeException e) {
+			// Said, where a damaged file above is not. The digest has answered for these bytes, so
+			// they are the ones the writer put down, and a blob that still does not read back is
+			// this build's writer and reader disagreeing: a miss every load and nothing else to see.
+			// A blob made for another vertex format lands here too and is said for the same
+			// reason. The format is in the key, and the program stored under a key was translated
+			// for the format that key was made of, so no ordinary road reaches another one: only a
+			// key that has come apart from its blob does.
+			refuse("a stored translation answered for its own bytes and still could not be read "
+					+ "back (" + e + ")");
+
 			return null;
 		} catch (OutOfMemoryError e) {
 			// Not the damaged file: the digest above answers for the bytes on disk, so damage is
@@ -491,44 +523,29 @@ public final class TranslationCache {
 	 * time: the joined text of a unit runs to megabytes and was built, and copied again into
 	 * bytes, for every stage of every program of a load, cache hits included. The length prefix
 	 * is counted first, so the key does not move.
+	 * <p>
+	 * <strong>Each line is encoded once</strong>, and the arrays are kept between the count and the
+	 * feed. Counting the bytes by walking the characters and then encoding them walked every line
+	 * twice, and that was most of what a key cost apart from the digest itself. What the arrays
+	 * hold is the unit's text once, and only for the length of this call. The count is theirs, so
+	 * it is what the encoder actually wrote, a lone surrogate's replacement included.
 	 */
 	private static void feedLines(MessageDigest digest, List<String> lines) {
+		byte[][] encoded = new byte[lines.size()][];
 		int length = Math.max(0, lines.size() - 1);
-		for (String line : lines) {
-			length += utf8Length(line);
+		for (int at = 0; at < encoded.length; at++) {
+			encoded[at] = lines.get(at).getBytes(StandardCharsets.UTF_8);
+			length += encoded[at].length;
 		}
 
 		digest.update(intBytes(length));
-		for (int at = 0; at < lines.size(); at++) {
+		for (int at = 0; at < encoded.length; at++) {
 			if (at > 0) {
 				digest.update((byte) '\n');
 			}
 
-			digest.update(lines.get(at).getBytes(StandardCharsets.UTF_8));
+			digest.update(encoded[at]);
 		}
-	}
-
-	/** How many bytes {@code getBytes(UTF_8)} yields, a lone surrogate counting as its replacement. */
-	private static int utf8Length(String text) {
-		int length = 0;
-		for (int at = 0; at < text.length(); at++) {
-			char c = text.charAt(at);
-			if (c < 0x80) {
-				length += 1;
-			} else if (c < 0x800) {
-				length += 2;
-			} else if (Character.isHighSurrogate(c) && at + 1 < text.length()
-					&& Character.isLowSurrogate(text.charAt(at + 1))) {
-				length += 4;
-				at++;
-			} else if (Character.isSurrogate(c)) {
-				length += 1;
-			} else {
-				length += 3;
-			}
-		}
-
-		return length;
 	}
 
 	private static byte[] intBytes(int value) {
@@ -584,30 +601,43 @@ public final class TranslationCache {
 	 * translated from cold at every swap. One is what a swap needs, and it is what bounds the disk
 	 * at two editions rather than at one per build ever made. A build whose edition IS the family
 	 * spares none, which is every release and also a development build no commit could be read for.
+	 * <p>
+	 * It never throws, and goes on past whatever refuses it: every folder is attempted, and within
+	 * one every file that will go does.
+	 *
+	 * @return each folder left behind with the first refusal it gave, or empty when all of it went
 	 */
-	private static void dropOtherEditions(Path root, Path mine, String family) throws IOException {
+	private static String dropOtherEditions(Path root, Path mine, String family) {
 		List<Path> entries;
 		try (Stream<Path> found = Files.list(root)) {
 			entries = found.toList();
+		} catch (IOException | RuntimeException e) {
+			return "the folder could not be listed (" + e + ")";
 		}
 
 		String kept = mine.getFileName().toString().equals(family)
 				? "" : newestSibling(entries, mine, family);
+		List<String> left = new ArrayList<>();
 
 		for (Path entry : entries) {
 			if (!entry.equals(mine) && !entry.getFileName().toString().equals(kept)) {
-				dropTree(entry);
+				Exception refusal = dropTree(entry);
+				if (refusal != null) {
+					left.add(entry.getFileName() + " (" + refusal + ")");
+				}
 			}
 		}
+
+		return String.join(", ", left);
 	}
 
 	/**
 	 * The name of the edition of this family used most recently, or empty when this build is the
 	 * only one of its family to have run here. A directory has a name, so an empty answer matches
-	 * nothing.
+	 * nothing. A folder whose stamp cannot be read is not a candidate, which costs a swap one
+	 * store at worst.
 	 */
-	private static String newestSibling(List<Path> entries, Path mine, String family)
-			throws IOException {
+	private static String newestSibling(List<Path> entries, Path mine, String family) {
 		String newest = "";
 		long stamp = Long.MIN_VALUE;
 
@@ -617,7 +647,13 @@ public final class TranslationCache {
 				continue;
 			}
 
-			long when = Files.getLastModifiedTime(entry).toMillis();
+			long when;
+			try {
+				when = Files.getLastModifiedTime(entry).toMillis();
+			} catch (IOException e) {
+				continue;
+			}
+
 			if (when > stamp) {
 				stamp = when;
 				newest = name;
@@ -645,32 +681,83 @@ public final class TranslationCache {
 		return text.replaceAll("[^A-Za-z0-9._-]", "_");
 	}
 
-	private static void dropTree(Path entry) throws IOException {
-		try (Stream<Path> tree = Files.walk(entry)) {
-			for (Path found : tree.sorted(Comparator.reverseOrder()).toList()) {
+	/**
+	 * Deletes what it can of one folder, deepest first, and goes on past a file that refuses: the
+	 * files beside it are space as well. The folders above a refusal then refuse in their turn, not
+	 * being empty, so the FIRST refusal is the one that says why.
+	 *
+	 * @return that first refusal, or null when the whole folder went
+	 */
+	private static Exception dropTree(Path entry) {
+		List<Path> tree;
+		try (Stream<Path> walk = Files.walk(entry)) {
+			tree = walk.sorted(Comparator.reverseOrder()).toList();
+		} catch (IOException | RuntimeException e) {
+			// A folder inside it that cannot be read, which the walk throws unchecked.
+			return e;
+		}
+
+		Exception first = null;
+		for (Path found : tree) {
+			try {
 				Files.deleteIfExists(found);
+			} catch (IOException e) {
+				if (first == null) {
+					first = e;
+				}
 			}
 		}
+
+		return first;
 	}
 
 	/**
-	 * Every blob on disk, oldest stamp first.
+	 * Deletes the {@code .part} files a killed writer left in this edition's own directory, and
+	 * answers for the ones that stay.
 	 * <p>
-	 * <strong>A neighbour is only deleted when {@code prunePartials} says so, which is at install
-	 * and nowhere else.</strong> A sweep runs while other workers are in the middle of their own
-	 * writes, and deleting what they hold open takes their blob down on one system and aborts the
-	 * sweep on the other. What a sweep does with a neighbour is ignore it.
+	 * <strong>A neighbour is only deleted here, which is at install and nowhere else.</strong> A
+	 * sweep runs while other workers are in the middle of their own writes, and deleting what they
+	 * hold open takes their blob down on one system and aborts the sweep on the other.
+	 * <p>
+	 * One that refuses is held by something outside this process, and is named beside the folders
+	 * {@link #dropOtherEditions} could not empty, in the same {@link #problem}: the next install
+	 * tries again, and refused out of here it would have left the whole cache off over one file
+	 * nothing reads. It is not counted, since {@link #scan} does not count a neighbour and a sweep
+	 * has nothing to drop for one.
+	 *
+	 * @return each file left behind with its refusal, or empty when all of it went
+	 * @throws IOException when the directory cannot be listed, which is this edition's own and so
+	 *                     leaves the cache off
 	 */
-	private static List<Blob> scan(Path root, boolean prunePartials) throws IOException {
+	private static String dropPartials(Path mine) throws IOException {
+		List<String> left = new ArrayList<>();
+
+		try (Stream<Path> entries = Files.list(mine)) {
+			for (Path entry : entries.toList()) {
+				if (entry.getFileName().toString().endsWith(PART_SUFFIX)) {
+					try {
+						Files.deleteIfExists(entry);
+					} catch (IOException e) {
+						left.add(mine.getFileName() + "/" + entry.getFileName() + " (" + e + ")");
+					}
+				}
+			}
+		}
+
+		return String.join(", ", left);
+	}
+
+	/**
+	 * Every blob on disk, oldest stamp first. A neighbour is ignored: it is not reachable, it is
+	 * about to become a blob, and it is nobody's to count. {@link #dropPartials} is what deletes
+	 * the dead ones.
+	 */
+	private static List<Blob> scan(Path root) throws IOException {
 		List<Blob> blobs = new ArrayList<>();
 
 		try (Stream<Path> entries = Files.list(root)) {
 			for (Path entry : entries.toList()) {
-				if (entry.getFileName().toString().endsWith(PART_SUFFIX)) {
-					if (prunePartials) {
-						Files.deleteIfExists(entry);
-					}
-				} else {
+				if (!entry.getFileName().toString().endsWith(PART_SUFFIX)) {
 					try {
 						blobs.add(new Blob(entry, Files.getLastModifiedTime(entry).toMillis(),
 								Files.size(entry)));
@@ -702,6 +789,12 @@ public final class TranslationCache {
 	 * The count is put down in a {@code finally}, because the caller's test is that same count: a
 	 * refusal anywhere in here without it leaves the count high and turns every later write into a
 	 * full walk of the directory under this lock, for the rest of the session and with nothing said.
+	 * <p>
+	 * It is put down by the difference the sweep found and not as the figure, because a store adds
+	 * to the count outside this lock: a blob that lands after the listing and is added before the
+	 * count is set would otherwise be wiped from it, and a count that runs short is one the ceiling
+	 * is late to catch. What the difference can do instead is count a blob the listing saw twice,
+	 * which is the direction the count already errs in, and the next sweep's rescan puts it right.
 	 */
 	private static void sweep(Path root) {
 		synchronized (LOCK) {
@@ -709,9 +802,10 @@ public final class TranslationCache {
 				return;
 			}
 
-			long total = BYTES.get();
+			long counted = BYTES.get();
+			long total = counted;
 			try {
-				List<Blob> blobs = scan(root, false);
+				List<Blob> blobs = scan(root);
 				total = total(blobs);
 
 				for (Blob blob : blobs) {
@@ -729,7 +823,7 @@ public final class TranslationCache {
 				// under this lock for the rest of the session.
 				nextSweepNanos = System.nanoTime() + SWEEP_BACKOFF_NANOS;
 			} finally {
-				BYTES.set(total);
+				BYTES.addAndGet(total - counted);
 			}
 		}
 	}

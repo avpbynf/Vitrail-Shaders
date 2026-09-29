@@ -1,0 +1,84 @@
+--- const-and-precision.fsh (FRAGMENT) ---
+#version 460 core
+#define <engine defines>
+layout(std140) uniform OfGlobals {
+	vec3 fogColor;
+	mat4 gbufferProjection;
+};
+float ofReducedSin(float ofX) { float ofK = floor(ofX * 0.15915494); float ofR = ofX - ofK * 6.28125 - ofK * 1.9353072e-3; ofR -= 6.2831855 * step(3.1415927, ofR); float ofS = sign(ofR); float ofA = 1.5707964 - abs(abs(ofR) - 1.5707964); float ofZ = ofA * ofA; return clamp(ofS * ofA * (1.0 + ofZ * (-1.6666654611e-1 + ofZ * (8.3321608736e-3 + ofZ * (-1.9515295891e-4)))), -1.0, 1.0); }
+float ofReducedCos(float ofX) { return ofReducedSin(ofX + 1.5707964); }
+vec2 ofReducedSin(vec2 ofX) { vec2 ofK = floor(ofX * 0.15915494); vec2 ofR = ofX - ofK * 6.28125 - ofK * 1.9353072e-3; ofR -= 6.2831855 * step(3.1415927, ofR); vec2 ofS = sign(ofR); vec2 ofA = 1.5707964 - abs(abs(ofR) - 1.5707964); vec2 ofZ = ofA * ofA; return clamp(ofS * ofA * (1.0 + ofZ * (-1.6666654611e-1 + ofZ * (8.3321608736e-3 + ofZ * (-1.9515295891e-4)))), -1.0, 1.0); }
+vec2 ofReducedCos(vec2 ofX) { return ofReducedSin(ofX + 1.5707964); }
+vec3 ofReducedSin(vec3 ofX) { vec3 ofK = floor(ofX * 0.15915494); vec3 ofR = ofX - ofK * 6.28125 - ofK * 1.9353072e-3; ofR -= 6.2831855 * step(3.1415927, ofR); vec3 ofS = sign(ofR); vec3 ofA = 1.5707964 - abs(abs(ofR) - 1.5707964); vec3 ofZ = ofA * ofA; return clamp(ofS * ofA * (1.0 + ofZ * (-1.6666654611e-1 + ofZ * (8.3321608736e-3 + ofZ * (-1.9515295891e-4)))), -1.0, 1.0); }
+vec3 ofReducedCos(vec3 ofX) { return ofReducedSin(ofX + 1.5707964); }
+vec4 ofReducedSin(vec4 ofX) { vec4 ofK = floor(ofX * 0.15915494); vec4 ofR = ofX - ofK * 6.28125 - ofK * 1.9353072e-3; ofR -= 6.2831855 * step(3.1415927, ofR); vec4 ofS = sign(ofR); vec4 ofA = 1.5707964 - abs(abs(ofR) - 1.5707964); vec4 ofZ = ofA * ofA; return clamp(ofS * ofA * (1.0 + ofZ * (-1.6666654611e-1 + ofZ * (8.3321608736e-3 + ofZ * (-1.9515295891e-4)))), -1.0, 1.0); }
+vec4 ofReducedCos(vec4 ofX) { return ofReducedSin(ofX + 1.5707964); }
+layout(location = 0) out vec4 ofFragData0;
+void ofOrderOutputs() { ofFragData0; }
+
+
+
+
+#define SUN_COLOUR vec3(1.0, 0.9, 0.8)
+#define SKY_COLOUR pow(vec3(0.3, 0.5, 0.9), vec3(2.2))
+#define ALIAS SUN_COLOUR
+#define FROM_SRGB(c) pow(c, vec3(2.2))
+
+
+
+
+const float PI = 3.14159265;
+const vec3 up = vec3(0.0, 1.0, 0.0);
+ vec3 dir = normalize(vec3(1.0, 2.0, 3.0));
+const vec3 sun = SUN_COLOUR;
+ vec3 sky = SKY_COLOUR;
+const vec3 aliased = ALIAS;
+ vec3 linear = FROM_SRGB(vec3(0.5));
+ mat2 rot = mat2(ofReducedCos(0.5), -ofReducedSin(0.5), ofReducedSin(0.5), ofReducedCos(0.5));
+const  float precise = 1.0;
+const int STEPS = 4;
+ vec3 fromUniform = fogColor * 2.0;
+float table[STEPS];
+
+ vec3 shade( vec3 n, const in vec3 l,  float k) {
+	return n * max(dot(n, l), 0.0) * k;
+}
+
+void main() { ofOrderOutputs();
+	ofFragData0 = vec4(shade(dir, up, PI), 1.0);
+}
+--- notes ---
+fragmentOutputs = 1
+dynamicFragData = 0
+uniformConflicts = 0
+shadowCalls = 0
+unwrappedShadow = 0
+strippedExtensions = 0
+depthEpilogue = 0
+alphaEpilogue = 0
+coverage = 0
+depthLookups = 0
+parameterLookups = 0
+pinnedLookups = 0
+unpinnedParameterLookups = 0
+fragCoordZ = 0
+fragCoordXyz = 0
+fragCoordUnhandled = 0
+fragDepthWrites = 0
+fragDepthUnhandled = 0
+conflictNames = []
+comparedSamplers = []
+hardwareCompared = []
+retypedSamplers = []
+storageBlocks = []
+volumeLookups = 0
+volumesLeftAlone = 0
+trigCalls = 4
+gameTextureMatrix = 0
+gameModelView = 0
+--- drawBuffers ---
+[]
+--- block ---
+vec3 fogColor
+mat4 gbufferProjection
+--- samplers ---

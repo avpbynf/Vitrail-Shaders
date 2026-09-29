@@ -28,7 +28,10 @@ ignores the rest. The game is the one thing a jar is built for, and its name say
 which, `+mc26.2` or `+mc26.3`; a jar refuses to load under the other game. On Fabric, two modules of Fabric API are declared as
 required, and they are the whole of what this mod takes from it: the key
 mapping and the client tick, which is what the settings screen is opened by.
-Nothing of the world's rendering goes through Fabric API.
+One road of the world's rendering does go through Fabric API, though: its
+renderer module, which Sodium carries a copy of, submits the cracks over a
+block being mined by a method of its own, and Vitrail's hook for those cracks
+covers that method as well as the game's.
 
 Sodium is declared as a required dependency, so the game will refuse to start
 without it. Do not update it past 0.9.x: it has no stable API for what a shader
