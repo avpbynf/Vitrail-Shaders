@@ -470,6 +470,11 @@ own sky, the two elements the game pushes nothing for, keep the frame's matrix, 
 The game's sky pipeline declares **no depth-stencil state at all**. A pack program handed the
 ordinary state would write the sky into the depth buffer, and the world would then test against it.
 
+The coverage mask follows from it. A piece that claims its pixels writes the far plane there, which
+is what the depth buffer still holds under the sky, and not the depth of its own fragment: the disc
+stands sixteen blocks over the eye, and recorded at that depth it cut away everything the game drew
+behind it, the core of a beacon beam above that height first among them.
+
 And the sky disc's topology is a triangle fan, not quads. Any program substituted into a pass the
 game opened inherits that pass's topology, so the geometry family has to answer it rather than
 assume the terrain's.

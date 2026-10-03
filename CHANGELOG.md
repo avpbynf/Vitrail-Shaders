@@ -41,6 +41,13 @@ what the next one holds.
   pixel, found far terrain at the camera everywhere past that texel, and painted the whole view in
   one pinkish colour. The depth is now the far plane across the whole screen, as the mod's own
   image is under Iris.
+- **A beacon beam's core no longer stops sixteen blocks above the camera.** With the pack drawing
+  the sky, the bright inner beam ended at a flat line sixteen blocks over the player's eyes that
+  rose and fell with them, while the faint outer glow went on up. Vitrail lets the game's own
+  picture through wherever the game drew something in front of the pack's, and it took the sky to
+  stand where the game builds it, sixteen blocks up, so whatever the game drew above that height
+  lost to the pack's sky. The sky now counts as infinitely far away, as it does under Iris, which
+  also lifts the same cut from the End, where the game builds its sky a hundred blocks out.
 
 ## 0.12.0-beta
 

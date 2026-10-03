@@ -9,6 +9,7 @@ import dev.vitrail.pack.model.AlphaTest;
 import dev.vitrail.pack.model.ProgramStage;
 import dev.vitrail.pack.texture.CustomImages;
 import dev.vitrail.pack.texture.VolumeAtlas;
+import dev.vitrail.uniform.ClipSpace;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -79,6 +80,16 @@ record Emitter(ProgramStage stage, VertexInputs inputs, List<String> bound, Alph
 	 * depth is in front of, and the reader owes them no test of their own.
 	 */
 	private static final String COVERAGE = "ofCoverage";
+
+	/**
+	 * What a piece of the sky leaves in the mask instead of its own depth, which is the far plane.
+	 * <p>
+	 * The sky neither tests nor writes the depth attachment ({@code SkyDraw.descriptor}), so under
+	 * every pixel of it the attachment still holds its clear, and the mask is to carry what the
+	 * attachment holds. Recording the disc's own depth, sixteen blocks over the eye, cut away every
+	 * feature the game drew behind that plane, the core of a beacon beam first among them.
+	 */
+	private static final String FAR_PLANE = ClipSpace.REVERSED.z < 0.0F ? "0.0" : "1.0";
 
 	String header(List<TranslatedUnit.Uniform> block, List<TranslatedUnit.Uniform> samplers,
 			Set<String> varyings, Set<String> shadowed) {
@@ -523,7 +534,8 @@ record Emitter(ProgramStage stage, VertexInputs inputs, List<String> bound, Alph
 				+ (this.alphaEpilogue
 						? " " + this.alphaTest.discard(outputName(0, shadowed) + ".a")
 						: "")
-				+ (this.covers ? " " + COVERAGE + " = " + writtenDepth() + ";" : "")
+				+ (this.covers ? " " + COVERAGE + " = "
+						+ (this.inputs == VertexInputs.SKY ? FAR_PLANE : writtenDepth()) + ";" : "")
 				+ " }\n";
 	}
 
